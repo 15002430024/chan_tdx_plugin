@@ -1,0 +1,13 @@
+{缠论中枢 v5.0 - 主图叠加}
+{显示中枢区域和中轴}
+
+{==== 获取中枢数据 ====}
+ZS_H:=TDXDLL1(3, H, L, C);  {中枢高点}
+ZS_L:=TDXDLL1(4, H, L, C);  {中枢低点}
+ZS_Z:=TDXDLL1(5, H, L, C);  {中枢中轴}
+
+{==== 绘制中枢区域 ====}
+STICKLINE(ZS_H>0, ZS_H, ZS_L, 4, 0), COLORYELLOW;
+
+{==== 绘制中轴线 ====}
+DRAWLINE(ZS_Z>0, ZS_Z, ZS_Z>0, ZS_Z, 1), COLORMAGENTA, LINETHICK1;

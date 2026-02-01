@@ -1,0 +1,24 @@
+{缠论笔 v6.0 - 主图叠加}
+{显示笔端点和连线}
+
+{==== 获取数据 ====}
+FX:=TDXDLL1(1, H, L, C);   {分型}
+BI:=TDXDLL1(2, H, L, C);   {笔端点价格}
+
+{==== 笔端点判断 ====}
+顶点:=BI>0 AND FX=1;
+底点:=BI>0 AND FX=-1;
+端点:=BI>0;
+
+{==== 笔连线 ====}
+{使用DRAWLINE连接相邻端点}
+DRAWLINE(底点, BI, 顶点, BI, 1), COLORWHITE, LINETHICK2;
+DRAWLINE(顶点, BI, 底点, BI, 1), COLORWHITE, LINETHICK2;
+
+{==== 分型标记 ====}
+DRAWICON(FX=1, H*1.005, 2);   {顶分型}
+DRAWICON(FX=-1, L*0.995, 1);  {底分型}
+
+{==== 笔端点标记 ====}
+DRAWICON(顶点, BI, 14);   {顶端点 - 红色圆点}
+DRAWICON(底点, BI, 13);   {底端点 - 绿色圆点}

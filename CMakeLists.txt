@@ -138,6 +138,25 @@ if(MSVC)
 endif()
 
 # ----------------------------------------------------------------------------
+# 标准接口完整版DLL（推荐使用）
+# ----------------------------------------------------------------------------
+add_library(chan_std SHARED
+    src/tdx_standard.cpp
+    chan_min.def
+)
+
+set_target_properties(chan_std PROPERTIES
+    OUTPUT_NAME "chan_std"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
+
+if(MSVC)
+    target_compile_options(chan_std PRIVATE /W3 /O2)
+endif()
+
+# ----------------------------------------------------------------------------
 # 构建后复制到通达信目录（可选）
 # ----------------------------------------------------------------------------
 # 取消注释以下行并修改路径以自动复制DLL

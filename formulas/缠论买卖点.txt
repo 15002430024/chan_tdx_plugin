@@ -1,0 +1,26 @@
+{缠论买卖点 v5.0 - 主图叠加}
+{显示买卖点信号}
+
+{==== 获取买卖点数据 ====}
+BSIG:=TDXDLL1(7, H, L, C);   {买点信号}
+SSIG:=TDXDLL1(8, H, L, C);   {卖点信号}
+
+{==== 买点信号 ====}
+{1=底分型买点, 2=中枢下沿买点, 3=三买}
+DRAWICON(BSIG=1, L*0.99, 1);   {一买 - 绿箭头}
+DRAWICON(BSIG=2, L*0.99, 5);   {二买 - 蓝箭头}  
+DRAWICON(BSIG=3, L*0.99, 7);   {三买 - 紫箭头}
+
+DRAWTEXT(BSIG=1, L*0.97, '1买'), COLORGREEN;
+DRAWTEXT(BSIG=2, L*0.97, '2买'), COLORBLUE;
+DRAWTEXT(BSIG=3, L*0.97, '3买'), COLORMAGENTA;
+
+{==== 卖点信号 ====}
+{-1=顶分型卖点, -2=中枢上沿卖点, -3=三卖}
+DRAWICON(SSIG=-1, H*1.01, 2);  {一卖 - 红箭头}
+DRAWICON(SSIG=-2, H*1.01, 6);  {二卖 - 橙箭头}
+DRAWICON(SSIG=-3, H*1.01, 8);  {三卖 - 黄箭头}
+
+DRAWTEXT(SSIG=-1, H*1.03, '1卖'), COLORRED;
+DRAWTEXT(SSIG=-2, H*1.03, '2卖'), COLORYELLOW;
+DRAWTEXT(SSIG=-3, H*1.03, '3卖'), COLORWHITE;
