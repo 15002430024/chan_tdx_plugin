@@ -1,13 +1,13 @@
-{缠论分型 v5.0 - 主图叠加}
+{缠论分型 v6.0 - 主图叠加}
 {使用方法：公式管理器 → 新建 → 技术指标 → 画线方法选"主图叠加"}
 
 {==== 分型识别 ====}
 FX:=TDXDLL1(1, H, L, C);
 
 {==== 顶底分型标记 ====}
-DRAWICON(FX=1, H, 2);   {顶分型 - 红色向下箭头}
-DRAWICON(FX=-1, L, 1);  {底分型 - 绿色向上箭头}
+DRAWICON(FX=1, H*1.005, 2);   {顶分型 - 红色向下箭头}
+DRAWICON(FX=-1, L*0.995, 1);  {底分型 - 绿色向上箭头}
 
 {==== 可选：文字标记 ====}
-{DRAWTEXT(FX=1, H*1.02, '顶'), COLORRED;}
-{DRAWTEXT(FX=-1, L*0.98, '底'), COLORGREEN;}
+DRAWTEXT(FX=1, H*1.02, '顶'), COLORRED;
+DRAWTEXT(FX=-1, L*0.98, '底'), COLORGREEN;

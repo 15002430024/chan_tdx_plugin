@@ -828,9 +828,9 @@ void FenXing(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfINc
     }
 }
 
-// 函数2：笔端点
+// 函数2：笔端点类型
 // 公式调用：BI:TDXDLL1(2, H, L, C);
-// 返回值：端点价格，非端点为0
+// 返回值：1=顶端点, -1=底端点, 0=非端点
 void BiDuanDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfINc) {
     if (!pfOUT || DataLen <= 0) return;
     
@@ -839,11 +839,23 @@ void BiDuanDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pf
     memset(pfOUT, 0, DataLen * sizeof(float));
     
     for (const Stroke& bi : g_Strokes) {
-        if (bi.start_idx >= 0 && bi.start_idx < DataLen) {
-            pfOUT[bi.start_idx] = bi.start_price;
+        // 向上笔：起点是底，终点是顶
+        if (bi.direction == 1) {
+            if (bi.start_idx >= 0 && bi.start_idx < DataLen) {
+                pfOUT[bi.start_idx] = -1.0f;  // 底端点
+            }
+            if (bi.end_idx >= 0 && bi.end_idx < DataLen) {
+                pfOUT[bi.end_idx] = 1.0f;     // 顶端点
+            }
         }
-        if (bi.end_idx >= 0 && bi.end_idx < DataLen) {
-            pfOUT[bi.end_idx] = bi.end_price;
+        // 向下笔：起点是顶，终点是底
+        else if (bi.direction == -1) {
+            if (bi.start_idx >= 0 && bi.start_idx < DataLen) {
+                pfOUT[bi.start_idx] = 1.0f;   // 顶端点
+            }
+            if (bi.end_idx >= 0 && bi.end_idx < DataLen) {
+                pfOUT[bi.end_idx] = -1.0f;    // 底端点
+            }
         }
     }
 }
@@ -1188,6 +1200,83 @@ void OutputMA26(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pf
     }
 }
 
+// 函数18：中枢开始标记
+// 公式调用：ZSKS:TDXDLL1(18, H, L, C);
+// 返回值：1=下跌中枢开始, 2=上涨中枢开始, 0=非开始位置
+void ZhongShuKaiShi(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfINc) {
+    if (!pfOUT || DataLen <= 0) return;
+    
+    FullAnalyzeWithMA(pfINa, pfINb, pfINc, DataLen);
+    
+    memset(pfOUT, 0, DataLen * sizeof(float));
+    
+    for (const Pivot& zs : g_Pivots) {
+        if (zs.start_idx >= 0 && zs.start_idx < DataLen) {
+            // 1=下跌中枢(第一笔向下), 2=上涨中枢(第一笔向上)
+            pfOUT[zs.start_idx] = (zs.direction == -1) ? 1.0f : 2.0f;
+        }
+    }
+}
+
+// 函数19：中枢结束标记
+// 公式调用：ZSJS:TDXDLL1(19, H, L, C);
+// 返回值：1=下跌中枢结束, 2=上涨中枢结束, 0=非结束位置
+void ZhongShuJieShu(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfINc) {
+    if (!pfOUT || DataLen <= 0) return;
+    
+    FullAnalyzeWithMA(pfINa, pfINb, pfINc, DataLen);
+    
+    memset(pfOUT, 0, DataLen * sizeof(float));
+    
+    for (const Pivot& zs : g_Pivots) {
+        if (zs.end_idx >= 0 && zs.end_idx < DataLen) {
+            pfOUT[zs.end_idx] = (zs.direction == -1) ? 1.0f : 2.0f;
+        }
+    }
+}
+
+// 函数20：笔端点高点价格（只在顶点输出）
+// 公式调用：KXG:TDXDLL1(20, H, L, C);
+void BiGaoDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfINc) {
+    if (!pfOUT || DataLen <= 0) return;
+    
+    FullAnalyzeWithMA(pfINa, pfINb, pfINc, DataLen);
+    
+    memset(pfOUT, 0, DataLen * sizeof(float));
+    
+    for (const Stroke& bi : g_Strokes) {
+        // 向上笔的终点是顶点
+        if (bi.direction == 1 && bi.end_idx >= 0 && bi.end_idx < DataLen) {
+            pfOUT[bi.end_idx] = bi.end_price;
+        }
+        // 向下笔的起点也是顶点
+        if (bi.direction == -1 && bi.start_idx >= 0 && bi.start_idx < DataLen) {
+            pfOUT[bi.start_idx] = bi.start_price;
+        }
+    }
+}
+
+// 函数21：笔端点低点价格（只在底点输出）
+// 公式调用：KXD:TDXDLL1(21, H, L, C);
+void BiDiDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfINc) {
+    if (!pfOUT || DataLen <= 0) return;
+    
+    FullAnalyzeWithMA(pfINa, pfINb, pfINc, DataLen);
+    
+    memset(pfOUT, 0, DataLen * sizeof(float));
+    
+    for (const Stroke& bi : g_Strokes) {
+        // 向下笔的终点是底点
+        if (bi.direction == -1 && bi.end_idx >= 0 && bi.end_idx < DataLen) {
+            pfOUT[bi.end_idx] = bi.end_price;
+        }
+        // 向上笔的起点也是底点
+        if (bi.direction == 1 && bi.start_idx >= 0 && bi.start_idx < DataLen) {
+            pfOUT[bi.start_idx] = bi.start_price;
+        }
+    }
+}
+
 // ============================================================================
 // 函数注册数组
 // ============================================================================
@@ -1210,6 +1299,10 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
     {15, (pPluginFUNC)&OutputHH1},      // HH1
     {16, (pPluginFUNC)&OutputMA13},     // MA13
     {17, (pPluginFUNC)&OutputMA26},     // MA26
+    {18, (pPluginFUNC)&ZhongShuKaiShi}, // 中枢开始
+    {19, (pPluginFUNC)&ZhongShuJieShu}, // 中枢结束
+    {20, (pPluginFUNC)&BiGaoDian},      // 笔高点
+    {21, (pPluginFUNC)&BiDiDian},       // 笔低点
     {0,  NULL}  // 结束标记
 };
 
@@ -1219,7 +1312,7 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 
 extern "C" __declspec(dllexport) 
 BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun) {
-    WriteLog("RegisterTdxFunc v6.0 完整版 - 速查手册全实现");
+    WriteLog("RegisterTdxFunc v6.1 - 增加中枢开始/结束标记");
     
     if (pFun == NULL) {
         WriteLog("错误: pFun 为 NULL");
@@ -1228,7 +1321,7 @@ BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun) {
     
     if (*pFun == NULL) {
         *pFun = g_CalcFuncSets;
-        WriteLog("函数数组已注册: 17个函数");
+        WriteLog("函数数组已注册: 21个函数");
         return TRUE;
     }
     

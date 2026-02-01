@@ -1,13 +1,23 @@
-{缠论中枢 v5.0 - 主图叠加}
-{显示中枢区域和中轴}
+{缠论中枢 v6.1 - 主图叠加}
+{显示中枢区域 - 使用DRAWLINE画矩形框}
 
 {==== 获取中枢数据 ====}
-ZS_H:=TDXDLL1(3, H, L, C);  {中枢高点}
-ZS_L:=TDXDLL1(4, H, L, C);  {中枢低点}
-ZS_Z:=TDXDLL1(5, H, L, C);  {中枢中轴}
+ZSZG:=TDXDLL1(3, H, L, C);   {中枢高点ZG}
+ZSZD:=TDXDLL1(4, H, L, C);   {中枢低点ZD}
+ZSKS:=TDXDLL1(18, H, L, C);  {中枢开始: 1=下跌中枢, 2=上涨中枢}
+ZSJS:=TDXDLL1(19, H, L, C);  {中枢结束: 1=下跌中枢, 2=上涨中枢}
 
-{==== 绘制中枢区域 ====}
-STICKLINE(ZS_H>0, ZS_H, ZS_L, 4, 0), COLORYELLOW;
+{==== 下跌中枢（绿色）====}
+DRAWLINE(ZSKS=1, ZSZG, ZSJS=1, ZSZG, 0), COLOR1D7300;
+DRAWLINE(ZSKS=1, ZSZD, ZSJS=1, ZSZD, 0), COLOR1D7300;
+DRAWLINE(ZSKS=1, (ZSZG+ZSZD)/2, ZSJS=1, (ZSZG+ZSZD)/2, 0), COLOR1D7300, DOTLINE;
+STICKLINE(ZSKS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
+STICKLINE(ZSJS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
 
-{==== 绘制中轴线 ====}
-DRAWLINE(ZS_Z>0, ZS_Z, ZS_Z>0, ZS_Z, 1), COLORMAGENTA, LINETHICK1;
+{==== 上涨中枢（红色）====}
+DRAWLINE(ZSKS=2, ZSZG, ZSJS=2, ZSZG, 0), COLORRED;
+DRAWLINE(ZSKS=2, ZSZD, ZSJS=2, ZSZD, 0), COLORRED;
+DRAWLINE(ZSKS=2, (ZSZG+ZSZD)/2, ZSJS=2, (ZSZG+ZSZD)/2, 0), COLORRED, DOTLINE;
+STICKLINE(ZSKS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
+STICKLINE(ZSJS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
+

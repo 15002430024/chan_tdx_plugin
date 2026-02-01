@@ -1,26 +1,72 @@
-{缠论买卖点 v5.0 - 主图叠加}
-{显示买卖点信号}
+{缠论买卖点 v6.0 - 主图叠加}
+{显示买卖点信号 - 完整实现速查手册}
 
 {==== 获取买卖点数据 ====}
 BSIG:=TDXDLL1(7, H, L, C);   {买点信号}
 SSIG:=TDXDLL1(8, H, L, C);   {卖点信号}
 
-{==== 买点信号 ====}
-{1=底分型买点, 2=中枢下沿买点, 3=三买}
-DRAWICON(BSIG=1, L*0.99, 1);   {一买 - 绿箭头}
-DRAWICON(BSIG=2, L*0.99, 5);   {二买 - 蓝箭头}  
-DRAWICON(BSIG=3, L*0.99, 7);   {三买 - 紫箭头}
+{==== 买点分类 ====}
+{一买: 1=A型(背驰), 2=B型(三次确认)}
+{二买: 11=A型, 12=B1型, 13=B2型}
+{三买: 21}
+{准买点: 31=准一买, 32=准二买, 33=准三买}
 
-DRAWTEXT(BSIG=1, L*0.97, '1买'), COLORGREEN;
-DRAWTEXT(BSIG=2, L*0.97, '2买'), COLORBLUE;
-DRAWTEXT(BSIG=3, L*0.97, '3买'), COLORMAGENTA;
+一买A:=BSIG=1;
+一买B:=BSIG=2;
+二买A:=BSIG=11;
+二买B1:=BSIG=12;
+二买B2:=BSIG=13;
+三买:=BSIG=21;
+准一买:=BSIG=31;
+准二买:=BSIG=32;
+准三买:=BSIG=33;
 
-{==== 卖点信号 ====}
-{-1=顶分型卖点, -2=中枢上沿卖点, -3=三卖}
-DRAWICON(SSIG=-1, H*1.01, 2);  {一卖 - 红箭头}
-DRAWICON(SSIG=-2, H*1.01, 6);  {二卖 - 橙箭头}
-DRAWICON(SSIG=-3, H*1.01, 8);  {三卖 - 黄箭头}
+{==== 买点图标 ====}
+DRAWICON(一买A OR 一买B, L*0.99, 1);   {一买 - 绿箭头}
+DRAWICON(二买A OR 二买B1 OR 二买B2, L*0.99, 5);   {二买 - 蓝箭头}  
+DRAWICON(三买, L*0.99, 7);   {三买 - 紫箭头}
+DRAWICON(准一买 OR 准二买 OR 准三买, L*0.98, 11);  {准买点 - 星号}
 
-DRAWTEXT(SSIG=-1, H*1.03, '1卖'), COLORRED;
-DRAWTEXT(SSIG=-2, H*1.03, '2卖'), COLORYELLOW;
-DRAWTEXT(SSIG=-3, H*1.03, '3卖'), COLORWHITE;
+{==== 买点文字 ====}
+DRAWTEXT(一买A, L*0.97, '1买A'), COLORRED;
+DRAWTEXT(一买B, L*0.97, '1买B'), COLORRED;
+DRAWTEXT(二买A, L*0.97, '2买A'), COLORYELLOW;
+DRAWTEXT(二买B1, L*0.97, '2买B1'), COLORYELLOW;
+DRAWTEXT(二买B2, L*0.97, '2买B2'), COLORYELLOW;
+DRAWTEXT(三买, L*0.97, '3买'), COLORMAGENTA;
+DRAWTEXT(准一买, L*0.96, '准1'), COLORWHITE;
+DRAWTEXT(准二买, L*0.96, '准2'), COLORWHITE;
+DRAWTEXT(准三买, L*0.96, '准3'), COLORWHITE;
+
+{==== 卖点分类 ====}
+{一卖: -1=A型, -2=B型}
+{二卖: -11=A型, -12=B1型, -13=B2型}
+{三卖: -21}
+{准卖点: -31, -32, -33}
+
+一卖A:=SSIG=-1;
+一卖B:=SSIG=-2;
+二卖A:=SSIG=-11;
+二卖B1:=SSIG=-12;
+二卖B2:=SSIG=-13;
+三卖:=SSIG=-21;
+准一卖:=SSIG=-31;
+准二卖:=SSIG=-32;
+准三卖:=SSIG=-33;
+
+{==== 卖点图标 ====}
+DRAWICON(一卖A OR 一卖B, H*1.01, 2);  {一卖 - 红箭头}
+DRAWICON(二卖A OR 二卖B1 OR 二卖B2, H*1.01, 6);  {二卖 - 橙箭头}
+DRAWICON(三卖, H*1.01, 8);  {三卖 - 黄箭头}
+DRAWICON(准一卖 OR 准二卖 OR 准三卖, H*1.02, 12);  {准卖点 - 星号}
+
+{==== 卖点文字 ====}
+DRAWTEXT(一卖A, H*1.03, '1卖A'), COLORGREEN;
+DRAWTEXT(一卖B, H*1.03, '1卖B'), COLORGREEN;
+DRAWTEXT(二卖A, H*1.03, '2卖A'), COLORCYAN;
+DRAWTEXT(二卖B1, H*1.03, '2卖B1'), COLORCYAN;
+DRAWTEXT(二卖B2, H*1.03, '2卖B2'), COLORCYAN;
+DRAWTEXT(三卖, H*1.03, '3卖'), COLORWHITE;
+DRAWTEXT(准一卖, H*1.04, '准1'), COLORGRAY;
+DRAWTEXT(准二卖, H*1.04, '准2'), COLORGRAY;
+DRAWTEXT(准三卖, H*1.04, '准3'), COLORGRAY;

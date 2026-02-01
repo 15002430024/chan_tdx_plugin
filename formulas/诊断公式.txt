@@ -1,0 +1,56 @@
+{缠论DLL诊断公式 v6.0}
+{用于快速验证DLL各功能是否正常}
+{如有问题请逐一检查每个输出}
+
+{==== 获取所有DLL数据 ====}
+FX:=TDXDLL1(1, H, L, C);     {分型}
+BI:=TDXDLL1(2, H, L, C);     {笔端点}
+ZS_H:=TDXDLL1(3, H, L, C);   {中枢高}
+ZS_L:=TDXDLL1(4, H, L, C);   {中枢低}
+ZS_Z:=TDXDLL1(5, H, L, C);   {中枢中轴}
+BI_DIR:=TDXDLL1(6, H, L, C); {笔方向}
+BSIG:=TDXDLL1(7, H, L, C);   {买点}
+SSIG:=TDXDLL1(8, H, L, C);   {卖点}
+
+{==== 统计数据输出 ====}
+顶分型数:COUNT(FX=1, 0);
+底分型数:COUNT(FX=-1, 0);
+笔端点数:COUNT(BI>0, 0);
+中枢K线数:COUNT(ZS_H>0 AND ZS_L>0, 0);
+买点数:COUNT(BSIG>0, 0);
+卖点数:COUNT(SSIG<0, 0);
+
+{==== 买点分类统计 ====}
+一买数:COUNT(BSIG>=1 AND BSIG<=2, 0);
+二买数:COUNT(BSIG>=11 AND BSIG<=13, 0);
+三买数:COUNT(BSIG=21, 0);
+准买点数:COUNT(BSIG>=31 AND BSIG<=33, 0);
+
+{==== 诊断检查 ====}
+{正常情况下：}
+{1. 顶分型数 ≈ 底分型数}
+{2. 笔端点数 = 顶分型数 + 底分型数（每个分型都是笔端点）}
+{3. 买卖点数应该远小于分型数（比例约 1:10 或更少）}
+{4. 中枢K线数可能较多（一个中枢覆盖多根K线）}
+
+{买点过多警告}
+异常:=买点数>笔端点数/3;
+DRAWICON(异常 AND CURRBARSCOUNT=1, C, 4);  {异常时显示感叹号}
+
+{==== 画笔线验证 ====}
+顶点:=BI>0 AND FX=1;
+底点:=BI>0 AND FX=-1;
+DRAWLINE(底点, BI, 顶点, BI, 1), COLORCYAN, LINETHICK1;
+DRAWLINE(顶点, BI, 底点, BI, 1), COLORCYAN, LINETHICK1;
+
+{==== 画中枢验证 ====}
+STICKLINE(ZS_H>0 AND ZS_L>0, ZS_H, ZS_L, 2, 0), COLORYELLOW;
+
+{==== 画买卖点 ====}
+DRAWICON(BSIG>0, L*0.99, 1);
+DRAWICON(SSIG<0, H*1.01, 2);
+
+DRAWLINE(顶点, BI, 底点, BI, 1), COLORCYAN, LINETHICK1;
+
+{==== 画中枢验证 ====}
+STICKLINE(ZS_H>0 AND ZS_L>0, ZS_H, ZS_L, 2, 0), COLORYELLOW;

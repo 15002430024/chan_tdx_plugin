@@ -1,47 +1,47 @@
-{缠论完整指标 v6.0}
+{缠论完整指标 v6.2}
 {主图叠加指标 - 包含分型、笔、中枢、买卖点}
 
 {==== 函数编号说明 ====}
-{编号1: FenXing     - 分型识别 (1=顶, -1=底)}
-{编号2: BiDuanDian  - 笔端点价格}
-{编号3: ZhongShuGao - 中枢高点ZG}
-{编号4: ZhongShuDi  - 中枢低点ZD}
-{编号5: ZhongShuZhong - 中枢中轴}
-{编号6: BiDirection - 笔方向 (1=上, -1=下)}
-{编号7: BuySignal   - 买点信号 (1/2=一买, 11-13=二买, 21=三买, 31-33=准买点)}
-{编号8: SellSignal  - 卖点信号 (负值对应卖点)}
-{编号9: NewBar      - 新K线标记}
-{编号10: TestFunc   - 测试函数}
-{编号11-17: 方向/GG1/DD1/LL1/HH1/MA13/MA26}
+{编号2: BI - 笔端点类型 (1=顶, -1=底)}
+{编号3: ZSZG - 中枢高点}
+{编号4: ZSZD - 中枢低点}
+{编号7: BSIG - 买点信号}
+{编号8: SSIG - 卖点信号}
+{编号18: ZSKS - 中枢开始}
+{编号19: ZSJS - 中枢结束}
+{编号20: KXG - 笔高点价格}
+{编号21: KXD - 笔低点价格}
 
 {==== 获取数据 ====}
-FX:=TDXDLL1(1, H, L, C);
 BI:=TDXDLL1(2, H, L, C);
-ZS_H:=TDXDLL1(3, H, L, C);
-ZS_L:=TDXDLL1(4, H, L, C);
-ZS_Z:=TDXDLL1(5, H, L, C);
-BI_DIR:=TDXDLL1(6, H, L, C);
+ZSZG:=TDXDLL1(3, H, L, C);
+ZSZD:=TDXDLL1(4, H, L, C);
 BSIG:=TDXDLL1(7, H, L, C);
 SSIG:=TDXDLL1(8, H, L, C);
-
-{==== 笔端点判断 ====}
-顶点:=BI>0 AND FX=1;
-底点:=BI>0 AND FX=-1;
+ZSKS:=TDXDLL1(18, H, L, C);
+ZSJS:=TDXDLL1(19, H, L, C);
+KXG:=TDXDLL1(20, H, L, C);
+KXD:=TDXDLL1(21, H, L, C);
 
 {==== 笔连线 ====}
-DRAWLINE(底点, BI, 顶点, BI, 1), COLORWHITE, LINETHICK2;
-DRAWLINE(顶点, BI, 底点, BI, 1), COLORWHITE, LINETHICK2;
-
-{==== 分型标记 ====}
-DRAWICON(FX=1, H*1.005, 2);   {顶分型 - 红色向下箭头}
-DRAWICON(FX=-1, L*0.995, 1);  {底分型 - 绿色向上箭头}
+DRAWLINE(BI=1, KXG, BI=-1, KXD, 0), COLORYELLOW;
+DRAWLINE(BI=-1, KXD, BI=1, KXG, 0), COLORYELLOW;
 
 {==== 中枢区域 ====}
-STICKLINE(ZS_H>0, ZS_H, ZS_L, 4, 0), COLORYELLOW;
+{下跌中枢}
+DRAWLINE(ZSKS=1, ZSZG, ZSJS=1, ZSZG, 0), COLOR1D7300;
+DRAWLINE(ZSKS=1, ZSZD, ZSJS=1, ZSZD, 0), COLOR1D7300;
+STICKLINE(ZSKS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
+STICKLINE(ZSJS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
+{上涨中枢}
+DRAWLINE(ZSKS=2, ZSZG, ZSJS=2, ZSZG, 0), COLORRED;
+DRAWLINE(ZSKS=2, ZSZD, ZSJS=2, ZSZD, 0), COLORRED;
+STICKLINE(ZSKS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
+STICKLINE(ZSJS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
 
 {==== 笔端点标记 ====}
-DRAWICON(顶点, BI, 14);   {顶端点}
-DRAWICON(底点, BI, 13);   {底端点}
+DRAWICON(BI=1, KXG, 14);
+DRAWICON(BI=-1, KXD, 13);
 
 {==== 买卖点信号 ====}
 {一买A/B}
@@ -62,14 +62,20 @@ DRAWTEXT(BSIG=21, L*0.98, '3买'), COLORMAGENTA;
 {准买点}
 DRAWICON(BSIG>=31 AND BSIG<=33, L*0.99, 9);
 
-{一卖A/B/C}
-DRAWICON(SSIG=-1 OR SSIG=-2 OR SSIG=-3, H*1.01, 2);
+{一卖A/B}
+DRAWICON(SSIG=-1 OR SSIG=-2, H*1.01, 2);
 DRAWTEXT(SSIG=-1, H*1.02, '1卖A'), COLORRED;
 DRAWTEXT(SSIG=-2, H*1.02, '1卖B'), COLORRED;
-DRAWTEXT(SSIG=-3, H*1.02, '1卖C'), COLORRED;
 
-{二卖}
-DRAWICON(SSIG<=-11 AND SSIG>=-14, H*1.01, 6);
+{二卖A/B1/B2}
+DRAWICON(SSIG=-11 OR SSIG=-12 OR SSIG=-13, H*1.01, 6);
+DRAWTEXT(SSIG=-11, H*1.02, '2卖A'), COLORYELLOW;
+DRAWTEXT(SSIG=-12, H*1.02, '2卖B1'), COLORYELLOW;
+DRAWTEXT(SSIG=-13, H*1.02, '2卖B2'), COLORYELLOW;
 
 {三卖}
 DRAWICON(SSIG=-21, H*1.01, 8);
+DRAWTEXT(SSIG=-21, H*1.02, '3卖'), COLORWHITE;
+
+{准卖点}
+DRAWICON(SSIG=-31 OR SSIG=-32 OR SSIG=-33, H*1.01, 10);

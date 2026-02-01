@@ -1,0 +1,22 @@
+{缠论中枢调试 v6.0}
+{检查中枢数据是否正确}
+
+{==== 获取中枢数据 ====}
+ZS_H:=TDXDLL1(3, H, L, C);
+ZS_L:=TDXDLL1(4, H, L, C);
+
+{==== 显示原始值 ====}
+中枢高:ZS_H, COLORRED, NODRAW;
+中枢低:ZS_L, COLORGREEN, NODRAW;
+
+{==== 只在有中枢时显示 ====}
+有中枢:=ZS_H>0 AND ZS_L>0;
+
+{检查值是否在合理范围}
+合理:=有中枢 AND ZS_H>ZS_L AND ZS_H<H*2 AND ZS_L>L*0.5;
+
+{==== 简单画法 ====}
+STICKLINE(合理, ZS_H, ZS_L, 1, 1), COLORYELLOW;
+
+{==== 统计 ====}
+中枢K线数:COUNT(有中枢, 0);
