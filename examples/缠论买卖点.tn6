@@ -1,0 +1,84 @@
+{====================================================}
+{ 缠论综合买卖点指标                                 }
+{ 文件名: 缠论买卖点.tn6                             }
+{ 版本: 1.0.0                                        }
+{ 说明: 显示所有买卖点（标准+准+类）                 }
+{====================================================}
+
+{调用DLL获取综合买卖信号}
+BUYX:="CHAN.DLL"$CHAN_BUYX(HIGH,LOW,OPEN,CLOSE,VOL,AMOUNT,0);
+SELLX:="CHAN.DLL"$CHAN_SELLX(HIGH,LOW,OPEN,CLOSE,VOL,AMOUNT,0);
+
+{======================== 买点 ========================}
+
+{标准一买 - 大红箭头}
+B1:=BUYX=1;
+DRAWICON(B1, LOW*0.97, 1);
+DRAWTEXT(B1, LOW*0.95, '1买'), COLORRED;
+
+{标准二买 - 橙色箭头}
+B2:=BUYX=2;
+DRAWICON(B2, LOW*0.97, 13);
+DRAWTEXT(B2, LOW*0.95, '2买'), COLOR00AAFF;
+
+{标准三买 - 黄色箭头}
+B3:=BUYX=3;
+DRAWICON(B3, LOW*0.97, 14);
+DRAWTEXT(B3, LOW*0.95, '3买'), COLORYELLOW;
+
+{准一买 - 小红点}
+PB1:=BUYX=11;
+DRAWICON(PB1, LOW*0.96, 5);
+DRAWTEXT(PB1, LOW*0.94, '准1'), COLORFF8888;
+
+{准二买}
+PB2:=BUYX=12;
+DRAWICON(PB2, LOW*0.96, 5);
+DRAWTEXT(PB2, LOW*0.94, '准2'), COLORFF8888;
+
+{准三买}
+PB3:=BUYX=13;
+DRAWICON(PB3, LOW*0.96, 5);
+DRAWTEXT(PB3, LOW*0.94, '准3'), COLORFF8888;
+
+{类二买A}
+L2BA:=BUYX=21;
+DRAWICON(L2BA, LOW*0.96, 6);
+DRAWTEXT(L2BA, LOW*0.94, '类2A'), COLORMAGENTA;
+
+{类二买AAA - 最强买点}
+L2BAAA:=BUYX=22;
+DRAWICON(L2BAAA, LOW*0.96, 7);
+DRAWTEXT(L2BAAA, LOW*0.94, '类2★'), COLORMAGENTA;
+
+{======================== 卖点 ========================}
+
+{标准一卖 - 大绿箭头}
+S1:=SELLX=-1;
+DRAWICON(S1, HIGH*1.03, 2);
+DRAWTEXT(S1, HIGH*1.05, '1卖'), COLORGREEN;
+
+{标准二卖}
+S2:=SELLX=-2;
+DRAWICON(S2, HIGH*1.03, 12);
+DRAWTEXT(S2, HIGH*1.05, '2卖'), COLORGREEN;
+
+{标准三卖}
+S3:=SELLX=-3;
+DRAWICON(S3, HIGH*1.03, 15);
+DRAWTEXT(S3, HIGH*1.05, '3卖'), COLORCYAN;
+
+{准一卖 - 小绿点}
+PS1:=SELLX=-11;
+DRAWICON(PS1, HIGH*1.04, 4);
+DRAWTEXT(PS1, HIGH*1.06, '准1'), COLOR88FF88;
+
+{准二卖}
+PS2:=SELLX=-12;
+DRAWICON(PS2, HIGH*1.04, 4);
+DRAWTEXT(PS2, HIGH*1.06, '准2'), COLOR88FF88;
+
+{类二卖}
+L2S:=SELLX<=-21 AND SELLX>=-22;
+DRAWICON(L2S, HIGH*1.04, 8);
+DRAWTEXT(L2S, HIGH*1.06, '类2'), COLORBLUE;

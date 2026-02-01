@@ -1,0 +1,23 @@
+{====================================================}
+{ 缠论中枢指标                                       }
+{ 文件名: 缠论中枢.tn6                               }
+{ 版本: 1.0.0                                        }
+{ 说明: 显示中枢区域和中轴                           }
+{====================================================}
+
+{调用DLL获取中枢数据}
+ZS_H:="CHAN.DLL"$CHAN_ZS_H(HIGH,LOW,OPEN,CLOSE,VOL,AMOUNT,0);
+ZS_L:="CHAN.DLL"$CHAN_ZS_L(HIGH,LOW,OPEN,CLOSE,VOL,AMOUNT,0);
+ZS_Z:="CHAN.DLL"$CHAN_ZS_Z(HIGH,LOW,OPEN,CLOSE,VOL,AMOUNT,0);
+
+{画中枢区域 - 浅色填充}
+DRAWBAND(ZS_H, RGB(255,220,220), ZS_L, RGB(220,255,220));
+
+{画中枢上沿}
+ZS_H, COLORRED, LINETHICK1;
+
+{画中枢下沿}
+ZS_L, COLORGREEN, LINETHICK1;
+
+{画中枢中轴}
+ZS_Z, COLORMAGENTA, LINETHICK2, LINEDOT;
