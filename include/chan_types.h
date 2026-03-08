@@ -177,6 +177,8 @@ struct Fractal {
 
 // ============================================================================
 // 笔结构
+// 重要：禁止用 memset(&stroke, 0, sizeof(stroke)) 初始化 Stroke
+// memset 会将 is_confirmed 置为 false。必须使用构造函数默认初始化。
 // ============================================================================
 
 struct Stroke {
@@ -188,12 +190,13 @@ struct Stroke {
     float      low;           // 笔的最低点
     float      power;         // 力度 (用于背驰比较)
     int        kline_count;   // 包含的K线数量
+    bool       is_confirmed;  // 是否已确认（true=已确认，false=未完成笔）
     
     Fractal    start_fx;      // 起点分型
     Fractal    end_fx;        // 终点分型
     
     Stroke() : id(0), start_idx(0), end_idx(0), direction(Direction::NONE),
-               high(0), low(0), power(0), kline_count(0) {}
+               high(0), low(0), power(0), kline_count(0), is_confirmed(true) {}
 };
 
 // ============================================================================

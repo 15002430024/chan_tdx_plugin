@@ -1,23 +1,25 @@
-{缠论中枢 v6.1 - 主图叠加}
-{显示中枢区域 - 使用DRAWLINE画矩形框}
+{缠论中枢 v7.4 - 主图叠加}
+{利用 DLL 持续输出的 ZG/ZD 画矩形，不再依赖 ZSKS/ZSJS 起止点}
 
 {==== 获取中枢数据 ====}
-ZSZG:=TDXDLL1(3, H, L, C);   {中枢高点ZG}
-ZSZD:=TDXDLL1(4, H, L, C);   {中枢低点ZD}
-ZSKS:=TDXDLL1(18, H, L, C);  {中枢开始: 1=下跌中枢, 2=上涨中枢}
-ZSJS:=TDXDLL1(19, H, L, C);  {中枢结束: 1=下跌中枢, 2=上涨中枢}
+ZSZG:=TDXDLL1(3, H, L, C);
+ZSZD:=TDXDLL1(4, H, L, C);
+ZS_DIR:=TDXDLL1(22, H, L, C);
 
-{==== 下跌中枢（绿色）====}
-DRAWLINE(ZSKS=1, ZSZG, ZSJS=1, ZSZG, 0), COLOR1D7300;
-DRAWLINE(ZSKS=1, ZSZD, ZSJS=1, ZSZD, 0), COLOR1D7300;
-DRAWLINE(ZSKS=1, (ZSZG+ZSZD)/2, ZSJS=1, (ZSZG+ZSZD)/2, 0), COLOR1D7300, DOTLINE;
-STICKLINE(ZSKS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
-STICKLINE(ZSJS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
+{==== 中枢判定 ====}
+在中枢内:=ZSZG>ZSZD;
 
-{==== 上涨中枢（红色）====}
-DRAWLINE(ZSKS=2, ZSZG, ZSJS=2, ZSZG, 0), COLORRED;
-DRAWLINE(ZSKS=2, ZSZD, ZSJS=2, ZSZD, 0), COLORRED;
-DRAWLINE(ZSKS=2, (ZSZG+ZSZD)/2, ZSJS=2, (ZSZG+ZSZD)/2, 0), COLORRED, DOTLINE;
-STICKLINE(ZSKS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
-STICKLINE(ZSJS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
+{==== 方案A：统一灰色空心矩形 ====}
+{STICKLINE(在中枢内, ZSZG, ZSZD, 4, 1), COLORGRAY;}
 
+{==== 方案B：区分颜色（当前启用）====}
+STICKLINE(在中枢内 AND ZS_DIR>0, ZSZG, ZSZD, 4, 1), COLORRED;
+STICKLINE(在中枢内 AND ZS_DIR<0, ZSZG, ZSZD, 4, 1), COLORGREEN;
+
+{==== 方案C：备选 - 如方案A出现栅栏效应，改用上下沿横线+左右竖线 ====}
+{ZSKS:=TDXDLL1(18, H, L, C);}
+{ZSJS:=TDXDLL1(19, H, L, C);}
+{STICKLINE(在中枢内, ZSZG, ZSZG, 4, 0), COLORRED;}
+{STICKLINE(在中枢内, ZSZD, ZSZD, 4, 0), COLORRED;}
+{STICKLINE(ZSKS>0, ZSZG, ZSZD, 0.1, 0), COLORRED;}
+{STICKLINE(ZSJS>0, ZSZG, ZSZD, 0.1, 0), COLORRED;}

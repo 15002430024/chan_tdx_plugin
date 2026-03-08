@@ -45,6 +45,8 @@ void ChanCore::Clear() {
 
 int ChanCore::Analyze(const float* highs, const float* lows, 
                       const float* closes, const float* volumes, int count) {
+    (void)closes;   // 预留参数
+    (void)volumes;  // 预留参数
     if (!highs || !lows || count <= 0) {
         CHAN_LOG_ERROR("Analyze: 输入参数无效");
         return -1;
@@ -82,6 +84,7 @@ int ChanCore::Analyze(const float* highs, const float* lows,
     
     // 步骤4: 中枢识别
     int zs_count = CheckZS();
+    (void)zs_count;
     CHAN_LOG_DEBUG("中枢识别完成: %d 个中枢", zs_count);
     
     return 0;
@@ -178,8 +181,16 @@ int ChanCore::RemoveInclude(const float* highs, const float* lows, int count) {
                     int prev_idx = (int)m_merged_klines.size() - 2;
                     if (m_merged_klines[prev_idx].high < last.high) {
                         curr_dir = Direction::UP;
-                    } else {
+                    } else if (m_merged_klines[prev_idx].high > last.high) {
                         curr_dir = Direction::DOWN;
+                    } else {
+                        // 高点相等时比较低点
+                        if (m_merged_klines[prev_idx].low < last.low) {
+                            curr_dir = Direction::UP;
+                        } else if (m_merged_klines[prev_idx].low > last.low) {
+                            curr_dir = Direction::DOWN;
+                        }
+                        // else: 高低点都相等 → 保持 curr_dir 不变
                     }
                 } else {
                     // 只有一根K线，默认向上
@@ -198,8 +209,15 @@ int ChanCore::RemoveInclude(const float* highs, const float* lows, int count) {
                 curr_dir = Direction::UP;
             } else if (curr.high < last.high) {
                 curr_dir = Direction::DOWN;
+            } else {
+                // 高点相等时比较低点
+                if (curr.low > last.low) {
+                    curr_dir = Direction::UP;
+                } else if (curr.low < last.low) {
+                    curr_dir = Direction::DOWN;
+                }
+                // else: 高低点都相等 → 不更新 curr_dir，保持上一次的值
             }
-            // 高点相等时保持原方向
             
             m_merged_klines.push_back(curr);
             m_raw_to_merged[i] = (int)m_merged_klines.size() - 1;
@@ -335,52 +353,73 @@ int ChanCore::CheckBI() {
     }
     
     int stroke_id = 0;
-    int start_idx = 0;  // 起始分型索引
+    int start = 0;        // 当前笔起点分型索引（在 fxlist 中）
+    int candidate = -1;   // 候选终点分型索引，-1 表示无候选
     
-    while (start_idx < n - 1) {
-        const Fractal& start_fx = fxlist[start_idx];
+    // 辅助 lambda：根据两个分型创建一笔
+    auto emitStroke = [&](const Fractal& fx1, const Fractal& fx2) {
+        Stroke stroke;
+        stroke.id = stroke_id++;
+        stroke.start_idx = fx1.kline_idx;
+        stroke.end_idx = fx2.kline_idx;
+        stroke.start_fx = fx1;
+        stroke.end_fx = fx2;
+        stroke.direction = (fx1.type == FractalType::BOTTOM) ? Direction::UP : Direction::DOWN;
+        stroke.high = (stroke.direction == Direction::UP) ? fx2.price : fx1.price;
+        stroke.low = (stroke.direction == Direction::UP) ? fx1.price : fx2.price;
+        stroke.power = stroke.high - stroke.low;
+        stroke.kline_count = fx2.kline_idx - fx1.kline_idx + 1;
+        stroke.is_confirmed = true;
+        m_strokes.push_back(stroke);
+    };
+    
+    for (int i = 1; i < n; ++i) {
+        const Fractal& fx = fxlist[i];
+        const Fractal& startFx = fxlist[start];
         
-        // 寻找能够形成笔的下一个分型
-        bool found = false;
-        for (int end_idx = start_idx + 1; end_idx < n; ++end_idx) {
-            const Fractal& end_fx = fxlist[end_idx];
-            
-            if (CanFormStroke(start_fx, end_fx)) {
-                // 可以形成笔
-                Stroke stroke;
-                stroke.id = stroke_id++;
-                stroke.start_idx = start_fx.kline_idx;
-                stroke.end_idx = end_fx.kline_idx;
-                stroke.start_fx = start_fx;
-                stroke.end_fx = end_fx;
-                
-                if (start_fx.type == FractalType::BOTTOM) {
-                    // 底到顶 = 上涨笔
-                    stroke.direction = Direction::UP;
-                    stroke.low = start_fx.price;
-                    stroke.high = end_fx.price;
-                } else {
-                    // 顶到底 = 下跌笔
-                    stroke.direction = Direction::DOWN;
-                    stroke.high = start_fx.price;
-                    stroke.low = end_fx.price;
+        // ---- 规则1：同类型分型 ----
+        if (fx.type == startFx.type) {
+            if (candidate == -1) {
+                // 无候选终点：更新起点极值
+                if ((fx.type == FractalType::TOP && fx.price > startFx.price) ||
+                    (fx.type == FractalType::BOTTOM && fx.price < startFx.price)) {
+                    start = i;
                 }
-                
-                stroke.power = stroke.high - stroke.low;
-                stroke.kline_count = end_fx.kline_idx - start_fx.kline_idx + 1;
-                
-                m_strokes.push_back(stroke);
-                
-                start_idx = end_idx;
-                found = true;
-                break;
+            } else {
+                // 有候选终点：出现同向分型 = 反转证据 → 确认笔
+                emitStroke(fxlist[start], fxlist[candidate]);
+                start = candidate;
+                candidate = -1;
+                --i;  // 回退，让当前分型在下一轮重新处理
+            }
+            continue;
+        }
+        
+        // ---- 规则2：异类型分型 ----
+        // 2a. 距离检查（原始K线下标差）
+        int raw_distance = fx.kline_idx - startFx.kline_idx;
+        if (raw_distance < m_config.min_bi_len) continue;
+        
+        // 2b. 价格有效性检查
+        if (startFx.type == FractalType::TOP && startFx.price <= fx.price) continue;
+        if (startFx.type == FractalType::BOTTOM && startFx.price >= fx.price) continue;
+        
+        // 2c. 更新候选终点
+        if (candidate == -1) {
+            candidate = i;  // 首个合法候选
+        } else {
+            const Fractal& candFx = fxlist[candidate];
+            if ((fx.type == FractalType::TOP && fx.price > candFx.price) ||
+                (fx.type == FractalType::BOTTOM && fx.price < candFx.price)) {
+                candidate = i;  // 极值延伸
             }
         }
-        
-        if (!found) {
-            // 没有找到能形成笔的分型，跳过当前分型
-            start_idx++;
-        }
+    }
+    
+    // ---- 规则3：末端未完成笔 ----
+    if (candidate != -1) {
+        emitStroke(fxlist[start], fxlist[candidate]);
+        m_strokes.back().is_confirmed = false;  // 标记为未确认
     }
     
     return (int)m_strokes.size();
@@ -395,6 +434,11 @@ int ChanCore::CheckZS() {
     
     const auto& strokes = m_strokes;
     int n = (int)strokes.size();
+    
+    // 排除未完成笔
+    if (n > 0 && !strokes.back().is_confirmed) {
+        n--;
+    }
     
     if (n < m_config.min_zs_bi_count) {
         return 0;

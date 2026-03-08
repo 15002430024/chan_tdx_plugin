@@ -5,13 +5,16 @@
 // 版本: v6.0 (2026-02-01) - 完整实现速查手册所有买卖点逻辑
 // ============================================================================
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 // ============================================================================
 // 通达信标准插件接口
@@ -55,21 +58,27 @@ struct MergedKLine {
     bool is_merged;     // 是否合并
     int merge_start;    // 合并起始索引
     int merge_end;      // 合并结束索引
+    int raw_high_idx;   // 高点来源的原始K线索引（REQ-001新增）
+    int raw_low_idx;    // 低点来源的原始K线索引（REQ-001新增）
 };
 
 struct Fractal {
     int type;           // 1=顶分型, -1=底分型
-    int index;          // K线索引
+    int index;          // K线索引（原始K线，用于绘图）
+    int merged_index;   // 合并K线索引（REQ-002新增，用于逻辑计算）
     float high;         // 分型高点
     float low;          // 分型低点
 };
 
+// 重要：禁止用 memset(&stroke, 0, sizeof(stroke)) 初始化 Stroke
+// memset 会将 is_confirmed 置为 false。创建 Stroke 时必须显式设置所有字段。
 struct Stroke {
     int start_idx;      // 起点K线索引
     int end_idx;        // 终点K线索引
     float start_price;  // 起点价格
     float end_price;    // 终点价格
     int direction;      // 1=向上, -1=向下
+    bool is_confirmed;  // true=已确认, false=未完成笔
 };
 
 struct Pivot {
@@ -159,6 +168,8 @@ static void RemoveInclude(const float* highs, const float* lows, int count) {
     first.is_merged = false;
     first.merge_start = 0;
     first.merge_end = 0;
+    first.raw_high_idx = 0;  // REQ-001: 高点来自第0根K线
+    first.raw_low_idx = 0;   // REQ-001: 低点来自第0根K线
     g_MergedKLines.push_back(first);
     g_RawToMerged[0] = 0;
     
@@ -173,7 +184,19 @@ static void RemoveInclude(const float* highs, const float* lows, int count) {
                 // 确定方向
                 if (g_MergedKLines.size() >= 2) {
                     int prev_idx = (int)g_MergedKLines.size() - 2;
-                    curr_dir = (g_MergedKLines[prev_idx].high < last.high) ? 1 : -1;
+                    if (g_MergedKLines[prev_idx].high < last.high) {
+                        curr_dir = 1;
+                    } else if (g_MergedKLines[prev_idx].high > last.high) {
+                        curr_dir = -1;
+                    } else {
+                        if (g_MergedKLines[prev_idx].low < last.low) {
+                            curr_dir = 1;
+                        } else if (g_MergedKLines[prev_idx].low > last.low) {
+                            curr_dir = -1;
+                        }
+                        // else: 高低点都相等 → 保持 curr_dir 不变
+                        // 如果 curr_dir 仍为 0，后续包含处理走 else 分支（向下合并）
+                    }
                 } else {
                     curr_dir = 1;
                 }
@@ -181,19 +204,42 @@ static void RemoveInclude(const float* highs, const float* lows, int count) {
             
             if (curr_dir > 0) {
                 // 向上：取高的高点和高的低点
-                last.high = std::max(last.high, highs[i]);
-                last.low = std::max(last.low, lows[i]);
+                if (highs[i] > last.high) {
+                    last.high = highs[i];
+                    last.raw_high_idx = i;  // REQ-001: 更新高点来源
+                }
+                if (lows[i] > last.low) {
+                    last.low = lows[i];
+                    last.raw_low_idx = i;   // REQ-001: 更新低点来源
+                }
             } else {
                 // 向下：取低的高点和低的低点
-                last.high = std::min(last.high, highs[i]);
-                last.low = std::min(last.low, lows[i]);
+                if (highs[i] < last.high) {
+                    last.high = highs[i];
+                    last.raw_high_idx = i;  // REQ-001: 更新高点来源
+                }
+                if (lows[i] < last.low) {
+                    last.low = lows[i];
+                    last.raw_low_idx = i;   // REQ-001: 更新低点来源
+                }
             }
             last.is_merged = true;
             last.merge_end = i;
             g_RawToMerged[i] = (int)g_MergedKLines.size() - 1;
         } else {
             // 无包含关系，新增K线
-            curr_dir = (highs[i] > last.high) ? 1 : -1;
+            if (highs[i] > last.high) {
+                curr_dir = 1;
+            } else if (highs[i] < last.high) {
+                curr_dir = -1;
+            } else {
+                if (lows[i] > last.low) {
+                    curr_dir = 1;
+                } else if (lows[i] < last.low) {
+                    curr_dir = -1;
+                }
+                // else: 高低点都相等 → 不更新 curr_dir，保持上一次的值
+            }
             
             MergedKLine curr;
             curr.index = i;
@@ -202,6 +248,8 @@ static void RemoveInclude(const float* highs, const float* lows, int count) {
             curr.is_merged = false;
             curr.merge_start = i;
             curr.merge_end = i;
+            curr.raw_high_idx = i;  // REQ-001: 高点来自当前K线
+            curr.raw_low_idx = i;   // REQ-001: 低点来自当前K线
             g_MergedKLines.push_back(curr);
             g_RawToMerged[i] = (int)g_MergedKLines.size() - 1;
         }
@@ -225,7 +273,8 @@ static void CheckFX() {
             curr.low > prev.low && curr.low > next.low) {
             Fractal fx;
             fx.type = 1;
-            fx.index = curr.merge_end;  // 使用合并后的最后一根K线索引
+            fx.index = curr.raw_high_idx;  // REQ-001: 使用高点实际来源的K线索引
+            fx.merged_index = i;           // REQ-002: 合并K线序列中的索引
             fx.high = curr.high;
             fx.low = curr.low;
             
@@ -243,7 +292,8 @@ static void CheckFX() {
                  curr.high < prev.high && curr.high < next.high) {
             Fractal fx;
             fx.type = -1;
-            fx.index = curr.merge_end;
+            fx.index = curr.raw_low_idx;  // REQ-001: 使用低点实际来源的K线索引
+            fx.merged_index = i;          // REQ-002: 合并K线序列中的索引
             fx.high = curr.high;
             fx.low = curr.low;
             
@@ -259,109 +309,156 @@ static void CheckFX() {
     }
 }
 
-// 笔识别
+// 辅助函数：生成一笔并加入 g_Strokes
+static void EmitStroke(const Fractal& fx1, const Fractal& fx2) {
+    Stroke stroke;
+    stroke.start_idx = fx1.index;
+    stroke.end_idx = fx2.index;
+    if (fx1.type == -1) {
+        // 底→顶 = 上升笔
+        stroke.direction = 1;
+        stroke.start_price = fx1.low;
+        stroke.end_price = fx2.high;
+    } else {
+        // 顶→底 = 下降笔
+        stroke.direction = -1;
+        stroke.start_price = fx1.high;
+        stroke.end_price = fx2.low;
+    }
+    stroke.is_confirmed = true;  // 默认已确认
+    g_Strokes.push_back(stroke);
+}
+
+// 笔识别 — 状态机实现（候选终点 + 极值追踪 + 未完成笔输出）
+// 设计决策（不可更改）：
+//   1. min_bi_len 计数口径：原始K线下标差（fx.index 是 merge_end）
+//   2. 未完成笔仅用于画线，不参与 CheckZS 和买卖点计算
+//   3. EmitStroke 中：上升笔 start_price=fx1.low, end_price=fx2.high
+//                     下降笔 start_price=fx1.high, end_price=fx2.low
 static void CheckBI(int min_bi_len = 5) {
     g_Strokes.clear();
     
     int n = (int)g_Fractals.size();
     if (n < 2) return;
     
-    int last_fx_idx = 0;
+    int start = 0;        // 当前笔起点分型索引（在 g_Fractals 中）
+    int candidate = -1;   // 候选终点分型索引，-1 表示无候选
     
     for (int i = 1; i < n; ++i) {
-        const Fractal& fx1 = g_Fractals[last_fx_idx];
-        const Fractal& fx2 = g_Fractals[i];
+        const Fractal& fx = g_Fractals[i];
+        const Fractal& startFx = g_Fractals[start];
         
-        // 必须顶底交替
-        if (fx1.type == fx2.type) continue;
-        
-        // 检查K线数量
-        int kline_count = fx2.index - fx1.index;
-        if (kline_count < min_bi_len) continue;
-        
-        // 检查价格有效性
-        if (fx1.type == -1 && fx2.type == 1) {
-            // 向上笔：顶必须高于底
-            if (fx2.high <= fx1.low) continue;
-        } else if (fx1.type == 1 && fx2.type == -1) {
-            // 向下笔：底必须低于顶
-            if (fx2.low >= fx1.high) continue;
+        // ---- 规则1：同类型分型 ----
+        if (fx.type == startFx.type) {
+            if (candidate == -1) {
+                // 无候选终点：更新起点极值
+                if ((fx.type == 1 && fx.high > startFx.high) ||
+                    (fx.type == -1 && fx.low < startFx.low)) {
+                    start = i;
+                }
+            } else {
+                // 有候选终点：出现同向分型 = 反转证据 → 确认笔
+                EmitStroke(g_Fractals[start], g_Fractals[candidate]);
+                start = candidate;
+                candidate = -1;
+                --i;  // 回退，让当前分型在下一轮重新处理
+            }
+            continue;
         }
         
-        // 成笔
-        Stroke stroke;
-        stroke.start_idx = fx1.index;
-        stroke.end_idx = fx2.index;
+        // ---- 规则2：异类型分型 ----
+        // 2a. 距离检查（原始K线下标差）
+        int dist = fx.index - startFx.index;
+        if (dist < min_bi_len) continue;
         
-        if (fx1.type == -1) {
-            // 向上笔
-            stroke.start_price = fx1.low;
-            stroke.end_price = fx2.high;
-            stroke.direction = 1;
+        // 2b. 价格有效性检查
+        if (startFx.type == -1 && fx.high <= startFx.low) continue;
+        if (startFx.type == 1  && fx.low  >= startFx.high) continue;
+        
+        // 2c. 更新候选终点
+        if (candidate == -1) {
+            candidate = i;  // 首个合法候选
         } else {
-            // 向下笔
-            stroke.start_price = fx1.high;
-            stroke.end_price = fx2.low;
-            stroke.direction = -1;
+            const Fractal& candFx = g_Fractals[candidate];
+            if ((fx.type == 1 && fx.high > candFx.high) ||
+                (fx.type == -1 && fx.low < candFx.low)) {
+                candidate = i;  // 极值延伸
+            }
         }
-        
-        g_Strokes.push_back(stroke);
-        last_fx_idx = i;
+    }
+    
+    // ---- 规则3：末端未完成笔 ----
+    if (candidate != -1) {
+        EmitStroke(g_Fractals[start], g_Fractals[candidate]);
+        g_Strokes.back().is_confirmed = false;  // 标记为未确认
     }
 }
 
-// 中枢识别
+// 中枢识别 — 前三笔锁定 ZG/ZD + 延伸不压缩 + 排除未完成笔
+// 设计决策（不可更改）：
+//   1. ZG/ZD 仅由前三笔确定，后续延伸笔不改变
+//   2. 无笔数上限（去掉 j < i+7）
+//   3. 中枢不允许重叠（i = end_bi + 1）
+//   4. 未完成笔（is_confirmed==false）不参与中枢计算
+//   5. 中枢方向按第一笔方向确定
 static void CheckZS(int min_zs_bi_count = 3) {
     g_Pivots.clear();
     
+    // 排除未完成笔
     int n = (int)g_Strokes.size();
+    if (n > 0 && !g_Strokes.back().is_confirmed) {
+        n--;
+    }
     if (n < min_zs_bi_count) return;
     
     int i = 0;
     while (i <= n - min_zs_bi_count) {
-        // 尝试从第i笔开始构建中枢
         float zg = 99999.0f;  // 中枢高点 = MIN(各笔高点)
         float zd = 0.0f;       // 中枢低点 = MAX(各笔低点)
         
-        int zs_start = g_Strokes[i].start_idx;
-        int zs_end = g_Strokes[i].end_idx;
-        int zs_bi_count = 0;
+        // 第一阶段：前三笔确定 ZG/ZD（不可变）
+        for (int j = i; j < i + min_zs_bi_count && j < n; ++j) {
+            float bi_high = std::max(g_Strokes[j].start_price, g_Strokes[j].end_price);
+            float bi_low  = std::min(g_Strokes[j].start_price, g_Strokes[j].end_price);
+            zg = std::min(zg, bi_high);
+            zd = std::max(zd, bi_low);
+        }
         
-        for (int j = i; j < n && j < i + 7; ++j) {  // 最多检查7笔
-            const Stroke& bi = g_Strokes[j];
-            
-            float bi_high = std::max(bi.start_price, bi.end_price);
-            float bi_low = std::min(bi.start_price, bi.end_price);
-            
-            float new_zg = std::min(zg, bi_high);
-            float new_zd = std::max(zd, bi_low);
-            
-            if (new_zg > new_zd) {
-                // 有效重叠
-                zg = new_zg;
-                zd = new_zd;
-                zs_end = bi.end_idx;
-                zs_bi_count = j - i + 1;
+        if (zg <= zd) {
+            ++i;
+            continue;  // 前三笔无有效重叠
+        }
+        
+        int zs_start = g_Strokes[i].start_idx;
+        int zs_end = g_Strokes[i + min_zs_bi_count - 1].end_idx;
+        int end_bi = i + min_zs_bi_count - 1;
+        
+        // 第二阶段：延伸 — 只检查是否与 [ZD, ZG] 有交集，不压缩区间
+        for (int j = end_bi + 1; j < n; ++j) {
+            float bi_high = std::max(g_Strokes[j].start_price, g_Strokes[j].end_price);
+            float bi_low  = std::min(g_Strokes[j].start_price, g_Strokes[j].end_price);
+            if (bi_high > zd && bi_low < zg) {
+                end_bi = j;
+                zs_end = g_Strokes[j].end_idx;
+                // 注意：ZG 和 ZD 不变！
             } else {
-                break;  // 无重叠，中枢结束
+                break;  // 脱离中枢区间
             }
         }
         
-        if (zs_bi_count >= min_zs_bi_count && zg > zd) {
-            Pivot pivot;
-            pivot.start_idx = zs_start;
-            pivot.end_idx = zs_end;
-            pivot.zg = zg;
-            pivot.zd = zd;
-            pivot.zz = (zg + zd) / 2.0f;
-            // 判断中枢方向：第一笔向下则为向下中枢，否则为向上中枢
-            pivot.direction = (g_Strokes[i].direction == -1) ? -1 : 1;
-            g_Pivots.push_back(pivot);
-            
-            i += zs_bi_count;
-        } else {
-            ++i;
-        }
+        // 构建 Pivot
+        Pivot pivot;
+        pivot.start_idx = zs_start;
+        pivot.end_idx = zs_end;
+        pivot.zg = zg;
+        pivot.zd = zd;
+        pivot.zz = (zg + zd) / 2.0f;
+        pivot.direction = g_Strokes[i].direction;  // 中枢方向按第一笔方向
+        
+        g_Pivots.push_back(pivot);
+        
+        // 不允许中枢重叠：跳过整个中枢
+        i = end_bi + 1;
     }
 }
 
@@ -389,6 +486,7 @@ static BiSequenceData GetBiSequence(int kline_idx) {
     std::vector<std::pair<int, float>> bottoms; // (索引, 价格) - 底点
     
     for (const Stroke& bi : g_Strokes) {
+        if (!bi.is_confirmed) continue;  // 未完成笔不纳入递归引用
         if (bi.end_idx > kline_idx) break;
         
         if (bi.direction == 1) {
@@ -424,13 +522,15 @@ static BiSequenceData GetBiSequence(int kline_idx) {
         seq.LL[i] = kline_idx - bottoms[idx].first;
     }
     
-    // 判断方向：最后一笔方向决定当前趋势后状态
-    if (!g_Strokes.empty()) {
-        const Stroke& last_bi = g_Strokes.back();
+    // 判断方向：最后一笔已确认笔方向决定当前趋势后状态
+    for (int si = (int)g_Strokes.size() - 1; si >= 0; --si) {
+        const Stroke& last_bi = g_Strokes[si];
+        if (!last_bi.is_confirmed) continue;  // 跳过未完成笔
         if (last_bi.end_idx <= kline_idx) {
             // 最后一笔向下 = 下跌后 = 方向1（适合找买点）
             // 最后一笔向上 = 上涨后 = 方向-1（适合找卖点）
             seq.direction = (last_bi.direction == -1) ? 1 : -1;
+            break;
         }
     }
     
@@ -869,8 +969,15 @@ void ZhongShuGao(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* p
     
     memset(pfOUT, 0, DataLen * sizeof(float));
     
-    for (const Pivot& zs : g_Pivots) {
-        for (int i = zs.start_idx; i <= zs.end_idx && i < DataLen; ++i) {
+    size_t pivotCount = g_Pivots.size();
+    for (size_t p = 0; p < pivotCount; ++p) {
+        const Pivot& zs = g_Pivots[p];
+        int actual_end = zs.end_idx;
+        // 边界收缩：如果当前中枢end与下一个中枢start重叠，收缩1格避免覆盖
+        if (p + 1 < pivotCount && zs.end_idx >= g_Pivots[p + 1].start_idx) {
+            actual_end = g_Pivots[p + 1].start_idx - 1;
+        }
+        for (int i = zs.start_idx; i <= actual_end && i < DataLen; ++i) {
             if (i >= 0) {
                 pfOUT[i] = zs.zg;
             }
@@ -887,8 +994,15 @@ void ZhongShuDi(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pf
     
     memset(pfOUT, 0, DataLen * sizeof(float));
     
-    for (const Pivot& zs : g_Pivots) {
-        for (int i = zs.start_idx; i <= zs.end_idx && i < DataLen; ++i) {
+    size_t pivotCount = g_Pivots.size();
+    for (size_t p = 0; p < pivotCount; ++p) {
+        const Pivot& zs = g_Pivots[p];
+        int actual_end = zs.end_idx;
+        // 边界收缩：如果当前中枢end与下一个中枢start重叠，收缩1格避免覆盖
+        if (p + 1 < pivotCount && zs.end_idx >= g_Pivots[p + 1].start_idx) {
+            actual_end = g_Pivots[p + 1].start_idx - 1;
+        }
+        for (int i = zs.start_idx; i <= actual_end && i < DataLen; ++i) {
             if (i >= 0) {
                 pfOUT[i] = zs.zd;
             }
@@ -905,8 +1019,15 @@ void ZhongShuZhong(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float*
     
     memset(pfOUT, 0, DataLen * sizeof(float));
     
-    for (const Pivot& zs : g_Pivots) {
-        for (int i = zs.start_idx; i <= zs.end_idx && i < DataLen; ++i) {
+    size_t pivotCount = g_Pivots.size();
+    for (size_t p = 0; p < pivotCount; ++p) {
+        const Pivot& zs = g_Pivots[p];
+        int actual_end = zs.end_idx;
+        // 边界收缩：如果当前中枢end与下一个中枢start重叠，收缩1格避免覆盖
+        if (p + 1 < pivotCount && zs.end_idx >= g_Pivots[p + 1].start_idx) {
+            actual_end = g_Pivots[p + 1].start_idx - 1;
+        }
+        for (int i = zs.start_idx; i <= actual_end && i < DataLen; ++i) {
             if (i >= 0) {
                 pfOUT[i] = zs.zz;
             }
@@ -945,6 +1066,7 @@ void BuySignal(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfI
     
     // 遍历所有向下笔的终点，检查买点条件
     for (const Stroke& bi : g_Strokes) {
+        if (!bi.is_confirmed) continue;    // 跳过未完成笔
         if (bi.direction != -1) continue;  // 只检查向下笔终点
         
         int idx = bi.end_idx;
@@ -1004,7 +1126,7 @@ void BuySignal(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfI
 
 // 函数8：卖点信号（完整实现速查手册逻辑）
 // 公式调用：SELL:TDXDLL1(8, H, L, C);
-// 返回值：-1/-2/-3=一卖A/B/C, -11/-12/-13/-14=二卖, -21=三卖, -31/-32/-33=准卖点, 0=无
+// 返回值：-1/-2/-3=一卖A/B/C, -11/-12/-13=二卖, -21=三卖, -31/-32/-33=准卖点, 0=无
 void SellSignal(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfINc) {
     if (!pfOUT || DataLen <= 0) return;
     
@@ -1014,6 +1136,7 @@ void SellSignal(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pf
     
     // 遍历所有向上笔的终点，检查卖点条件
     for (const Stroke& bi : g_Strokes) {
+        if (!bi.is_confirmed) continue;   // 跳过未完成笔
         if (bi.direction != 1) continue;  // 只检查向上笔终点
         
         int idx = bi.end_idx;
@@ -1228,9 +1351,16 @@ void ZhongShuJieShu(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float
     
     memset(pfOUT, 0, DataLen * sizeof(float));
     
-    for (const Pivot& zs : g_Pivots) {
-        if (zs.end_idx >= 0 && zs.end_idx < DataLen) {
-            pfOUT[zs.end_idx] = (zs.direction == -1) ? 1.0f : 2.0f;
+    size_t pivotCount = g_Pivots.size();
+    for (size_t p = 0; p < pivotCount; ++p) {
+        const Pivot& zs = g_Pivots[p];
+        int actual_end = zs.end_idx;
+        // 边界收缩：如果当前中枢end与下一个中枢start重叠，收缩1格避免覆盖
+        if (p + 1 < pivotCount && zs.end_idx >= g_Pivots[p + 1].start_idx) {
+            actual_end = g_Pivots[p + 1].start_idx - 1;
+        }
+        if (actual_end >= 0 && actual_end < DataLen) {
+            pfOUT[actual_end] = (zs.direction == -1) ? 1.0f : 2.0f;
         }
     }
 }
@@ -1244,14 +1374,31 @@ void BiGaoDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfI
     
     memset(pfOUT, 0, DataLen * sizeof(float));
     
+    // 收集所有笔端点中的顶点
+    std::set<int> top_indices;
     for (const Stroke& bi : g_Strokes) {
-        // 向上笔的终点是顶点
-        if (bi.direction == 1 && bi.end_idx >= 0 && bi.end_idx < DataLen) {
-            pfOUT[bi.end_idx] = bi.end_price;
+        if (bi.direction == 1) {
+            // 向上笔的终点是顶点
+            top_indices.insert(bi.end_idx);
+        } else if (bi.direction == -1) {
+            // 向下笔的起点是顶点
+            top_indices.insert(bi.start_idx);
         }
-        // 向下笔的起点也是顶点
-        if (bi.direction == -1 && bi.start_idx >= 0 && bi.start_idx < DataLen) {
-            pfOUT[bi.start_idx] = bi.start_price;
+    }
+    
+    // 在顶点位置输出高点价格
+    for (int idx : top_indices) {
+        if (idx >= 0 && idx < DataLen) {
+            // 找到对应笔的价格
+            for (const Stroke& bi : g_Strokes) {
+                if (bi.direction == 1 && bi.end_idx == idx) {
+                    pfOUT[idx] = bi.end_price;
+                    break;
+                } else if (bi.direction == -1 && bi.start_idx == idx) {
+                    pfOUT[idx] = bi.start_price;
+                    break;
+                }
+            }
         }
     }
 }
@@ -1265,14 +1412,49 @@ void BiDiDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfIN
     
     memset(pfOUT, 0, DataLen * sizeof(float));
     
+    // 收集所有笔端点中的底点
+    std::set<int> bottom_indices;
     for (const Stroke& bi : g_Strokes) {
-        // 向下笔的终点是底点
-        if (bi.direction == -1 && bi.end_idx >= 0 && bi.end_idx < DataLen) {
-            pfOUT[bi.end_idx] = bi.end_price;
+        if (bi.direction == -1) {
+            // 向下笔的终点是底点
+            bottom_indices.insert(bi.end_idx);
+        } else if (bi.direction == 1) {
+            // 向上笔的起点是底点
+            bottom_indices.insert(bi.start_idx);
         }
-        // 向上笔的起点也是底点
-        if (bi.direction == 1 && bi.start_idx >= 0 && bi.start_idx < DataLen) {
-            pfOUT[bi.start_idx] = bi.start_price;
+    }
+    
+    // 在底点位置输出低点价格
+    for (int idx : bottom_indices) {
+        if (idx >= 0 && idx < DataLen) {
+            for (const Stroke& bi : g_Strokes) {
+                if (bi.direction == -1 && bi.end_idx == idx) {
+                    pfOUT[idx] = bi.end_price;
+                    break;
+                } else if (bi.direction == 1 && bi.start_idx == idx) {
+                    pfOUT[idx] = bi.start_price;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// 函数22：中枢方向（持续输出）
+// 公式调用：ZS_DIR:TDXDLL1(22, H, L, C);
+// 返回值：1=上涨中枢(第一笔向上), -1=下跌中枢(第一笔向下), 0=不在中枢内
+void ZhongShuFangXiang(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfINc) {
+    if (!pfOUT || DataLen <= 0) return;
+    
+    FullAnalyzeWithMA(pfINa, pfINb, pfINc, DataLen);
+    
+    memset(pfOUT, 0, DataLen * sizeof(float));
+    
+    for (const Pivot& zs : g_Pivots) {
+        for (int i = zs.start_idx; i <= zs.end_idx && i < DataLen; ++i) {
+            if (i >= 0) {
+                pfOUT[i] = (float)zs.direction;
+            }
         }
     }
 }
@@ -1303,6 +1485,7 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
     {19, (pPluginFUNC)&ZhongShuJieShu}, // 中枢结束
     {20, (pPluginFUNC)&BiGaoDian},      // 笔高点
     {21, (pPluginFUNC)&BiDiDian},       // 笔低点
+    {22, (pPluginFUNC)&ZhongShuFangXiang}, // 中枢方向
     {0,  NULL}  // 结束标记
 };
 
@@ -1312,7 +1495,7 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 
 extern "C" __declspec(dllexport) 
 BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun) {
-    WriteLog("RegisterTdxFunc v6.1 - 增加中枢开始/结束标记");
+    WriteLog("RegisterTdxFunc v7.4 - 新增中枢方向输出");
     
     if (pFun == NULL) {
         WriteLog("错误: pFun 为 NULL");
@@ -1321,7 +1504,7 @@ BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun) {
     
     if (*pFun == NULL) {
         *pFun = g_CalcFuncSets;
-        WriteLog("函数数组已注册: 21个函数");
+        WriteLog("函数数组已注册: 22个函数");
         return TRUE;
     }
     

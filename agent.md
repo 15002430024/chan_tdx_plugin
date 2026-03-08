@@ -6,8 +6,8 @@
 
 - **项目名称**: 通达信缠论DLL插件 (chan_tdx_plugin)
 - **创建日期**: 2026-01-12
-- **最后更新**: 2026-02-01
-- **当前状态**: ✅ 完成 - 标准接口v6.0完全实现速查手册
+- **最后更新**: 2026-03-08
+- **当前状态**: 🚧 开发中 - 落地计划v7.4 Step 4.1 编译验证通过
 
 ---
 
@@ -17,11 +17,11 @@
 
 | 功能 | 状态 | 实现日期 | 说明 |
 |------|------|----------|------|
-| CMake 构建系统 | ✅ 完成 | 2026-01-12 | 支持32位DLL编译，包含测试目标 |
+| CMake 构建系统 | ✅ 完成 | 2026-03-06 | 统一DLL产物：chan主目标源自 tdx_standard.cpp，产出 chan.dll |
 | 通达信接口框架 | ✅ 完成 | 2026-01-12 | 18个导出函数已实现 |
 | 日志系统 | ✅ 完成 | 2026-01-12 | 支持文件和控制台输出 |
 | 基础数据类型定义 | ✅ 完成 | 2026-01-12 | KLine/Fractal/Stroke/Pivot/BiSequenceData |
-| 单元测试框架 | ✅ 完成 | 2026-02-01 | 40个测试用例全部通过 |
+| 单元测试框架 | ✅ 完成 | 2026-03-08 | 50个测试用例全部通过（含v7.4新增10个） |
 
 ### 模块 B: 核心算法（阶段一）
 
@@ -29,8 +29,8 @@
 |------|------|----------|------|
 | K线去包含处理 | ✅ 完成 | 2026-02-01 | RemoveInclude() 支持向上/向下趋势 |
 | 分型识别算法 | ✅ 完成 | 2026-02-01 | CheckFX() 识别顶底分型，处理连续同类型 |
-| 笔识别算法 | ✅ 完成 | 2026-02-01 | CheckBI() 支持可配置最小笔长度 |
-| 中枢识别 | ✅ 完成 | 2026-02-01 | CheckZS() 计算ZG/ZD/ZZ |
+| 笔识别算法 | ✅ 完成 | 2026-03-08 | CheckBI() 状态机重写：候选终点+极值追踪+未完成笔输出 |
+| 中枢识别 | ✅ 完成 | 2026-03-08 | CheckZS() 前三笔锁定ZG/ZD+延伸不压缩+排除未完成笔 |
 
 ### 模块 B2: 递归引用系统（阶段二）
 
@@ -96,7 +96,7 @@
 |------|------|----------|------|
 | 标准接口封装 | ✅ 完成 | 2026-02-01 | tdx_standard.cpp v6.0，完全实现速查手册 |
 | 分型识别 (编号1) | ✅ 完成 | 2026-02-01 | FenXing() 返回1/-1/0 |
-| 笔端点 (编号2) | ✅ 完成 | 2026-02-01 | BiDuanDian() 返回端点价格 |
+| 笔端点 (编号2) | ✅ 完成 | 2026-02-01 | BiDuanDian() 返回1=顶/-1=底/0=非端点 |
 | 中枢高点 (编号3) | ✅ 完成 | 2026-02-01 | ZhongShuGao() 返回ZG |
 | 中枢低点 (编号4) | ✅ 完成 | 2026-02-01 | ZhongShuDi() 返回ZD |
 | 中枢中轴 (编号5) | ✅ 完成 | 2026-02-01 | ZhongShuZhong() 返回(ZG+ZD)/2 |
@@ -112,6 +112,11 @@
 | HH1 (编号15) | ✅ 完成 | 2026-02-01 | OutputHH1() 最近顶距离 |
 | MA13 (编号16) | ✅ 完成 | 2026-02-01 | OutputMA13() 13周期均线 |
 | MA26 (编号17) | ✅ 完成 | 2026-02-01 | OutputMA26() 26周期均线 |
+| 中枢开始 (编号18) | ✅ 完成 | 2026-03-06 | ZhongShuKaiShi() 1=下跌中枢开始, 2=上涨中枢开始 |
+| 中枢结束 (编号19) | ✅ 完成 | 2026-03-06 | ZhongShuJieShu() 1=下跌中枢结束, 2=上涨中枢结束 |
+| 笔高点 (编号20) | ✅ 完成 | 2026-03-06 | BiGaoDian() 顶端点价格, 非顶为0 |
+| 笔低点 (编号21) | ✅ 完成 | 2026-03-06 | BiDiDian() 底端点价格, 非底为0 |
+| 中枢方向 (编号22) | ✅ 完成 | 2026-03-08 | ZhongShuFangXiang() 1=上涨中枢, -1=下跌中枢, 0=不在中枢内 |
 
 ---
 
@@ -142,13 +147,13 @@ BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun);
 | 编号 | 函数名 | 公式调用 | 返回值 |
 |------|--------|----------|--------|
 | 1 | FenXing | `TDXDLL1(1, H, L, C)` | 1=顶分型, -1=底分型, 0=无 |
-| 2 | BiDuanDian | `TDXDLL1(2, H, L, C)` | 端点价格, 非端点为0 |
+| 2 | BiDuanDian | `TDXDLL1(2, H, L, C)` | 1=顶端点, -1=底端点, 0=非端点 |
 | 3 | ZhongShuGao | `TDXDLL1(3, H, L, C)` | 中枢高点ZG |
 | 4 | ZhongShuDi | `TDXDLL1(4, H, L, C)` | 中枢低点ZD |
 | 5 | ZhongShuZhong | `TDXDLL1(5, H, L, C)` | 中枢中轴 |
 | 6 | BiDirection | `TDXDLL1(6, H, L, C)` | 1=向上笔, -1=向下笔 |
 | 7 | BuySignal | `TDXDLL1(7, H, L, C)` | 1/2=一买A/B, 11/12/13=二买, 21=三买, 31/32/33=准买点 |
-| 8 | SellSignal | `TDXDLL1(8, H, L, C)` | -1/-2/-3=一卖, -11~-14=二卖, -21=三卖, -31~-33=准卖点 |
+| 8 | SellSignal | `TDXDLL1(8, H, L, C)` | -1/-2/-3=一卖A/B/C, -11/-12/-13=二卖, -21=三卖, -31~-33=准卖点 |
 | 9 | NewBar | `TDXDLL1(9, H, L, C)` | 1=保留, 0=被合并 |
 | 10 | TestFunc | `TDXDLL1(10, H, L, C)` | K线序号 |
 | 11 | Direction | `TDXDLL1(11, H, L, C)` | 1=下跌后(买), -1=上涨后(卖) |
@@ -158,6 +163,11 @@ BOOL RegisterTdxFunc(PluginTCalcFuncInfo** pFun);
 | 15 | OutputHH1 | `TDXDLL1(15, H, L, C)` | 最近顶距离HH1 |
 | 16 | OutputMA13 | `TDXDLL1(16, H, L, C)` | 13周期均线 |
 | 17 | OutputMA26 | `TDXDLL1(17, H, L, C)` | 26周期均线 |
+| 18 | ZhongShuKaiShi | `TDXDLL1(18, H, L, C)` | 1=下跌中枢开始, 2=上涨中枢开始 |
+| 19 | ZhongShuJieShu | `TDXDLL1(19, H, L, C)` | 1=下跌中枢结束, 2=上涨中枢结束 |
+| 20 | BiGaoDian | `TDXDLL1(20, H, L, C)` | 顶端点价格, 非顶为0 |
+| 21 | BiDiDian | `TDXDLL1(21, H, L, C)` | 底端点价格, 非底为0 |
+| 22 | ZhongShuFangXiang | `TDXDLL1(22, H, L, C)` | 中枢方向持续输出: 1=上涨, -1=下跌, 0=无 |
 
 ### 旧版接口 (保留兼容)
 
@@ -392,6 +402,165 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 ---
 
 ## 📜 变更日志
+
+### [2026-03-08] - Step 1.7 chan_core.cpp 同步所有修复 (P0 同步)
+
+**同步项1 - RemoveInclude 方向判定修复:**
+- 第一处（无包含关系更新方向）：高点相等时进一步比较低点，高低点都相等时保持 curr_dir 不变
+- 第二处（包含关系内首次确定方向）：修复 else 默认 DOWN bug，改为 else if + 低点比较
+
+**同步项2 - CheckBI 状态机重写:**
+- 完全替换旧的贪心前扫 CheckBI，重写为三规则状态机（与 tdx_standard.cpp 一致）
+- 规则1：同类型分型——无候选更新起点极值，有候选确认笔并回退
+- 规则2：异类型分型——距离检查 + 价格检查 + 候选更新
+- 规则3：循环结束输出未完成笔（is_confirmed=false）
+- 使用 emitStroke lambda 封装笔创建，填充所有 Stroke 字段
+
+**同步项3 - CheckZS 未完成笔排除:**
+- 入口处新增 `if (n > 0 && !strokes.back().is_confirmed) { n--; }`
+- CheckZS 原有逻辑（前三笔锁定+延伸不压缩）已正确，无需其他修改
+
+**验证:**
+- ✅ 编译成功（chan.dll + chan_min.dll + test_chan_core.exe）
+- ✅ 40/40 测试全部通过
+
+---
+
+### [2026-03-08] - Step 1.6 新增编号22 ZhongShuFangXiang + 注册表更新
+
+**新增:**
+- `ZhongShuFangXiang`（编号22）：中枢方向持续输出函数，遍历 g_Pivots 填充每根K线的中枢方向
+- g_CalcFuncSets 数组新增 `{22, (pPluginFUNC)&ZhongShuFangXiang}` 注册项
+
+**修改:**
+- RegisterTdxFunc 日志更新为 `v7.4 - 新增中枢方向输出`，函数计数更新为 22
+- SellSignal 注释中删除 `-14`（代码中 CheckSecondSell 无 return -14 的路径，-14 从未实际产出）
+
+**验证:**
+- ✅ 代码修改完成，4处变更均已应用
+
+---
+
+### [2026-03-08] - Step 1.5 未完成笔过滤 (P0.5)
+
+**修改:**
+- `BuySignal`: 循环入口添加 `if (!bi.is_confirmed) continue` 跳过未完成笔
+- `SellSignal`: 同上
+- `GetBiSequence`: 笔端点收集循环添加过滤，未完成笔不纳入递归引用 GG/DD 序列
+- `GetBiSequence` 方向判断：从 `g_Strokes.back()` 改为反向遍历找最后一笔已确认笔
+- `Direction`（编号11）通过 `GetBiSequence` 自动受益，无需单独修改
+- 画线函数（BiDuanDian/BiGaoDian/BiDiDian/BiDirection）不添加过滤，保留未完成笔端点输出
+
+**验证:**
+- ✅ 编译成功（无错误、无警告）
+
+---
+
+### [2026-03-08] - Step 1.4 CheckZS 中枢识别重写 (P0)
+
+**修复:**
+- 前三笔锁定 ZG/ZD，延伸笔只检查交集不再压缩区间（修复中枢越延伸越扁的 Bug）
+- 去掉 `j < i + 7` 硬编码限制，中枢可无限延伸
+- 入口处排除未完成笔（`is_confirmed==false`）不参与中枢计算
+- 中枢方向直接取 `g_Strokes[i].direction`（简化三元表达式）
+- 中枢不重叠：`i = end_bi + 1` 跳过整个中枢
+
+**验证:**
+- ✅ 编译成功（无错误、无警告）
+
+---
+
+### [2026-03-08] - Step 1.3 CheckBI 状态机重写 (P0)
+
+**修改:**
+- 新增 `EmitStroke()` 辅助函数，封装笔创建逻辑
+- 完全重写 `CheckBI()` 为三规则状态机：
+  - 规则1（同类型分型）：无候选时更新起点极值；有候选时确认笔并回退重处理
+  - 规则2（异类型分型）：距离检查→价格有效性→候选终点极值追踪
+  - 规则3（循环结束）：输出末端未完成笔，标记 `is_confirmed=false`
+- `min_bi_len` 恢复为 5，距离计算改用 `fx.index`（原始K线下标差）
+- 解决贪婪匹配问题：单边趋势中不再产生虚假短笔
+
+**验证:**
+- ✅ 编译成功（无错误、无警告）
+
+---
+
+### [2026-03-06] - Step 1.2 RemoveInclude 方向判定修复 (P0.5)
+
+**修复:**
+- 第一处（无包含关系时更新方向）：`curr_dir = (highs[i] > last.high) ? 1 : -1` → 高点相等时比较低点，全部相等时保持原方向
+- 第二处（包含关系内首次确定方向）：`curr_dir = (prev.high < last.high) ? 1 : -1` → 同样增加等值处理
+- 解决一字涨停板和平顶K线场景下包含合并方向错误的问题
+
+**验证:**
+- ✅ 编译成功（无新增警告）
+- ✅ test_chan_core 40/40 测试通过（无回归）
+
+---
+
+### [2026-03-06] - Step 1.1 Stroke 新增 is_confirmed 字段
+
+**修改:**
+- `include/chan_types.h` Stroke 结构体新增 `bool is_confirmed` 字段，构造函数默认 `true`
+- `src/tdx_standard.cpp` 本地 Stroke 结构体新增 `bool is_confirmed` 字段
+- 两处均添加 memset 禁用注释（防止 memset 将 is_confirmed 置 false）
+- 全仓搜索确认无 memset 对 Stroke 的使用
+
+**验证:**
+- ✅ 编译成功（chan.dll + chan_min.dll + test_chan_core.exe）
+- ✅ test_chan_core 40/40 测试通过（无回归）
+
+---
+
+### [2026-03-06] - Step 0.1 CMakeLists.txt 统一 DLL 产物
+
+**修改:**
+- 将 `chan` 主目标的源文件从 `tdx_interface.cpp + chan_core.cpp` 改为 `tdx_standard.cpp`（自包含）
+- 移除 `chan_std` 目标（已合并到 `chan` 主目标，避免同名冲突）
+- 保留 `chan_min` 目标不变（调试用）
+- 保留 `test_chan_core` 测试目标不变
+- 为 `chan` 目标添加 MSVC 优化选项 `/W3 /O2`
+
+**验证:**
+- ✅ `cmake -A Win32 ..` 配置成功
+- ✅ `cmake --build . --config Release` 编译成功
+- ✅ 输出 chan.dll (137KB)，无 chan_std.dll
+- ✅ test_chan_core 40/40 测试通过
+
+---
+
+### [2026-02-02] - REQ-004/005 算法审计与公式兼容
+
+**审计结论：核心算法与手册一致**
+
+**审计内容:**
+- ✅ 笔生成算法 (`CheckBI`) - 正确实现顶底交替、距离检查
+- ✅ 分型识别 (`CheckFX`) - 正确实现严格顶底分型
+- ✅ 包含处理 (`RemoveInclude`) - 正确实现向上/向下合并
+- ✅ 买卖点条件 (`CheckFirstBuy` 等) - 与手册/公式逻辑一致
+- ✅ 幅度计算 (`CheckFirstBuyKJA/KJB`) - 与手册定义一致
+
+**新增文件:**
+- `formulas/缠论主图_chan.txt` - 兼容公式，使用 TDXDLL1 接口
+  - 完全复刻目标公式 `缠论主图.txt` 的逻辑
+  - 接口映射：BI=2, KXG=20, KXD=21, ZSZG=3, ZSZD=4, ZSKS=18, ZSJS=19
+
+**接口编号对照:**
+| 目标公式 (TDXDLL3) | 我们的接口 (TDXDLL1) | 功能 |
+|---|---|---|
+| 4 | 2 | BI (笔类型 1/-1) |
+| 2 | 20 | KXG (笔高点价格) |
+| 3 | 21 | KXD (笔低点价格) |
+| 9 | 3 | ZSZG (中枢高点) |
+| 10 | 4 | ZSZD (中枢低点) |
+| 11 | 18 | ZSKS (中枢开始) |
+| 12 | 19 | ZSJS (中枢结束) |
+
+**使用说明:**
+- 用户应使用 `缠论主图_chan.txt` 公式（而非原版 `缠论主图.txt`）
+- 该公式在通达信公式层计算买卖点，与 DLL 内置买卖点信号逻辑一致
+
 ### [2026-02-01] - v6.0 完整版：速查手册全实现
 
 **重大更新：完全实现速查手册所有买卖点逻辑**
@@ -682,7 +851,7 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 | **B5** | 三买：DD1>MIN(GG2,GG3) 高于中枢上沿 | `CheckThirdBuy()` 返回21 | ✅ |
 | **B6** | 准一买/准二买/准三买 | `CheckPreFirstBuy/Second/Third()` 返回31/32/33 | ✅ |
 | **S1** | 一卖A/B/C | `CheckFirstSell()` 返回-1/-2/-3 | ✅ |
-| **S2** | 二卖A/B1/B2/C1 | `CheckSecondSell()` 返回-11/-12/-13/-14 | ✅ |
+| **S2** | 二卖A/B1/B2 | `CheckSecondSell()` 返回-11/-12/-13 | ✅ |
 | **S3** | 三卖 | `CheckThirdSell()` 返回-21 | ✅ |
 | **S4** | 准一卖/准二卖/准三卖 | `CheckPreFirstSell/Second/Third()` 返回-31/-32/-33 | ✅ |
 
@@ -705,7 +874,7 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 
 ### 结论
 
-**v6.0 版本已完全实现速查手册所有要求**：
+**v6.2 版本已完全实现速查手册所有要求**：
 - ✅ 基础算法（分型/笔/中枢）100% 一致
 - ✅ 买卖点判断完整实现所有类型（一买A/B、二买A/B1/B2、三买、准买点）
 - ✅ 卖点镜像对称实现
@@ -713,3 +882,155 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 - ✅ 均线计算 (MA13/MA26)
 - ✅ 时间窗口检查 (LL1≤5/8/10, HH1≤5/8/10)
 - ✅ 幅度条件 (KJA/KJB)
+- ✅ **REQ-001 笔端点精准定位** (2026-02-01)
+- ✅ **REQ-002/003 笔灵敏度与中枢边界修复** (2026-02-01)
+
+---
+
+## 📜 变更日志
+
+### [2026-03-08] - v7.4 Step 4.1 编译验证
+
+**验证结果:**
+- ✅ 32位 DLL 编译通过（cmake -G "Visual Studio 17 2022" -A Win32 + Release）
+- ✅ 无编译警告（修复 WIN32_LEAN_AND_MEAN 重复定义、未引用变量、chan_min.def LIBRARY 名称）
+- ✅ DLL 大小合理：chan.dll = 137KB（目标 100-200KB）
+- ✅ dumpbin /exports 显示 RegisterTdxFunc（唯一导出符号）
+- ✅ 测试程序 test_chan_core.exe 编译通过
+- ✅ 50/50 测试全部通过（0 失败）
+
+**修复的警告:**
+- tdx_standard.cpp/tdx_minimal.cpp: WIN32_LEAN_AND_MEAN 加 #ifndef 守卫
+- chan_core.cpp: closes/volumes 参数加 (void) 转型，zs_count 加 (void)
+- test_chan_core.cpp: merged_count/fx_count/bi_count/zs_count 加 (void)
+- chan_min.def: LIBRARY 名称从 "chan" 改为 "chan_min"
+
+### [2026-03-08] - v7.4 Step 3.2 README.md 函数列表更新
+
+**修改:**
+- README.md 功能列表从7行更新为22个函数完整列表
+- 当前状态更新为 "v7.4 核心算法重写完成，共22个导出函数"
+- 编号2从"笔端点(待实现)"修正为"1=顶端点, -1=底端点, 0=非端点"
+- 新增编号18-22的完整说明
+
+### [2026-03-08] - v7.4 Step 3.1 agent.md 函数编号对照表修正
+
+**修改:**
+- 买卖点速查表中 S2 行：删除 `-14` 和 `C1`（代码中 CheckSecondSell 无 return -14 的路径，-14 从未实际产出）
+- 旧：“二卖A/B1/B2/C1 | CheckSecondSell() 返回-11/-12/-13/-14”
+- 新：“二卖A/B1/B2 | CheckSecondSell() 返回-11/-12/-13”
+- 其他项已在前期 Step 1.6 中完成：编号2返回值修正、编号18-22补充、SellSignal 注释删-14
+
+### [2026-03-08] - v7.4 Step 2.4 诊断公式注释修正
+
+**修改:**
+- `formulas/诊断公式.txt` 修正第2条诊断注释
+- 旧：“笔端点数 = 顶分型数 + 底分型数（每个分型都是笔端点）”
+- 新：“笔端点数 < 分型数（CheckBI 会过滤不满足距离/价格条件的分型）”
+- 原因：CheckBI 状态机重写后，不是所有分型都能成为笔端点，距离不足或价格无效的分型会被跳过
+
+### [2026-03-08] - v7.4 Step 2.3 缠论完整指标公式重写
+
+**修改:**
+- `formulas/缠论完整指标.txt` 从 v6.2 升级到 v7.4
+- 去掉所有 DRAWICON 图标和笔端点标记，统一用 DRAWTEXT 纯文字标注
+- 中枢画法从 DRAWLINE(ZSKS/ZSJS) 四边框模式改为 STICKLINE 连续灰色矩形
+- 不再依赖编号18/19(ZSKS/ZSJS)，改用 ZSZG>ZSZD 判定中枢区域
+- 新增编号22(ZS_DIR)中枢方向在函数编号说明中
+- 买卖点只显示核心信号(一二三买卖)，不显示准买/准卖（减少视觉干扰）
+- 新增 S1C(SSIG=-3) 一卖C型显示
+- 买点三层偏移(L*0.98/0.97/0.96)，卖点三层偏移(H*1.02/1.03/1.04)
+
+### [2026-03-08] - v7.4 Step 2.2 缠论买卖点公式重写
+
+**修改:**
+- `formulas/缠论买卖点.txt` 从 v6.0 升级到 v7.4
+- 去掉所有 DRAWICON 图标，统一用 DRAWTEXT 纯文字标注
+- 新增 S1C(SSIG=-3) 一卖C型显示
+- 买点三层偏移(L*0.98/0.97/0.96)，卖点三层偏移(H*1.02/1.03/1.04)
+- 去掉中间变量（一买A/一买B等），直接用 BSIG=N 判断
+
+### [2026-03-08] - v7.4 Step 2.1 缠论中枢公式 - 切换为方案B
+
+**修改:**
+- `formulas/缠论中枢.txt` 启用方案B（红绿区分颜色），注释掉方案A（灰色统一）
+- 上涨中枢(ZS_DIR>0)显示红色，下跌中枢(ZS_DIR<0)显示绿色
+
+### [2026-03-08] - v7.4 Step 2.1 缠论中枢公式重写
+
+**修改:**
+- `formulas/缠论中枢.txt` 从 v6.1 升级到 v7.4
+- 画法从 DRAWLINE 矩形框改为连续 STICKLINE 填充
+- 不再依赖 ZSKS/ZSJS(编号18/19) 起止点，改用 DLL 持续输出的 ZG/ZD
+- 新增 ZS_DIR(编号22) 中枢方向数据获取
+- 提供三种可选方案：A=灰色空心矩形(默认)，B=红绿区分颜色，C=上下沿横线+竖线
+
+---
+
+### [2026-03-08] - v7.4 Step 1.8 全量测试用例
+
+**新增:**
+- 10个新测试用例（测试33-42），覆盖v7.4所有核心修复项
+- 测试33: RemoveInclude_FlatTop — 平顶K线方向判定
+- 测试34: RemoveInclude_LimitUp — 一字涨停板处理
+- 测试35: CheckBI_MonotonicDown — 单边下跌不产生虚假短笔
+- 测试36: CheckBI_VShape — V型反转笔识别
+- 测试37: CheckBI_PriceConsistency — 端点价格一致性校验
+- 测试38: CheckBI_UnconfirmedStroke — 未完成笔标记验证
+- 测试39: CheckZS_NoShrink — ZG/ZD不因延伸缩小
+- 测试40: CheckZS_ExtendBeyond7 — 中枢可延伸超过7笔
+- 测试41: CheckZS_ExcludeUnconfirmed — 未完成笔排除
+- 测试42: Consistency_TwoImplementations — 两套调用方式一致性
+
+**验证结果:**
+- 全部50个测试通过 (50/50)
+- 100K K线性能测试: 11ms（远低于1秒目标）
+- 使用 MSVC x86 编译，需 /utf-8 /DNOMINMAX 标志
+
+### [2026-02-01] - v6.2 REQ-002/003 笔灵敏度与中枢边界修复
+
+**问题描述:**
+1. **笔过度简化**: 大趋势被简化为单根直线，忽略内部 N 形波动
+2. **中枢矩形歪斜**: 当相邻中枢边界重叠时，后一个中枢数据覆盖前一个，导致矩形变形
+3. **视觉混乱**: 多个公式同时显示过多图标（菱形/加号），干扰判读
+
+**根因分析:**
+1. `CheckBI()` 使用原始 K 线索引而非合并 K 线索引计算笔长度，阈值过严（5根）
+2. 中枢输出函数未处理边界重叠情况（Pivot A 的 `end_idx` == Pivot B 的 `start_idx`）
+3. 公式层叠加了分型、笔端点、买卖点等多种 DRAWICON
+
+**修复内容:**
+1. **Fractal 结构体**新增 `merged_index` 字段，记录分型在合并 K 线序列中的位置
+2. **CheckFX()** 填充 `fx.merged_index = i`（合并序列索引）
+3. **CheckBI()** 改用 `fx2.merged_index - fx1.merged_index` 计算笔长度，阈值从 5 降至 4
+4. **ZhongShuGao/Di/Zhong/JieShu()** 添加边界收缩逻辑：
+   ```cpp
+   if (p + 1 < pivotCount && zs.end_idx >= g_Pivots[p + 1].start_idx) {
+       actual_end = g_Pivots[p + 1].start_idx - 1;
+   }
+   ```
+5. 新增两个公式文件：
+   - `缠论纯线条.txt`: 仅笔和中枢矩形，无任何图标
+   - `缠论精简版.txt`: 笔、中枢、主要买卖点文字（无图标）
+
+**影响范围:**
+- 笔识别更灵敏，能捕捉内部 N 形结构
+- 中枢矩形不再歪斜，边界清晰
+- 可选择精简公式减少视觉干扰
+
+### [2026-02-01] - v6.1 REQ-001 笔端点精准定位修复
+
+**问题描述:**
+- 笔画线显示"悬空"，未连接到K线真实的最高/最低点
+- 原因：包含处理后，分型坐标使用 `merge_end`（合并组最后一根K线），而极值可能来自合并组中的其他K线
+
+**修复内容:**
+1. `MergedKLine` 结构新增 `raw_high_idx` 和 `raw_low_idx` 字段，追踪极值的真实来源
+2. `RemoveInclude()` 算法优化，在合并时动态更新极值索引
+3. `CheckFX()` 改用极值索引作为分型坐标：
+   - 顶分型使用 `curr.raw_high_idx`
+   - 底分型使用 `curr.raw_low_idx`
+
+**影响范围:**
+- 笔端点位置更精确，画线将准确连接K线影线尖端
+- 买卖点判断不受影响（使用价格而非坐标）

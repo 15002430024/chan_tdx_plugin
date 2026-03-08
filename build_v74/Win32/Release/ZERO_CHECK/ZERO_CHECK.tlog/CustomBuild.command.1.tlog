@@ -1,0 +1,10 @@
+^D:\DESKTOP\通达信中枢安装包\CHAN_TDX_PLUGIN\BUILD_V74\CMAKEFILES\B499A7F888E5827C7CD59FD2CA5101F5\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/Desktop/通达信中枢安装包/chan_tdx_plugin -BD:/Desktop/通达信中枢安装包/chan_tdx_plugin/build_v74 --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Desktop/通达信中枢安装包/chan_tdx_plugin/build_v74/chan_tdx_plugin.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

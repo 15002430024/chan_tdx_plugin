@@ -8,7 +8,9 @@
 // 3. 公式调用方式：TDXDLL1(编号, H, L, C)，不是函数名
 // ============================================================================
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <cstdio>
 

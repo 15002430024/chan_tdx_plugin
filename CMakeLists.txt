@@ -39,7 +39,7 @@ if(MSVC)
 endif()
 
 # ----------------------------------------------------------------------------
-# 源文件
+# 源文件（chan_core 仅用于测试目标，主 DLL 使用自包含的 tdx_standard.cpp）
 # ----------------------------------------------------------------------------
 set(HEADER_FILES
     include/tdx_interface.h
@@ -49,32 +49,18 @@ set(HEADER_FILES
     include/config_reader.h
 )
 
-set(SOURCE_FILES
-    src/dllmain.cpp
-    src/tdx_interface.cpp
-    src/chan_core.cpp
-    src/logger.cpp
-    src/config_reader.cpp
-)
-
 # ----------------------------------------------------------------------------
-# DLL目标
+# 主 DLL 目标（标准接口完整版，源自 tdx_standard.cpp，自包含）
 # ----------------------------------------------------------------------------
 add_library(chan SHARED
-    ${HEADER_FILES}
-    ${SOURCE_FILES}
+    src/tdx_standard.cpp
     chan.def
 )
 
-# 包含目录
-target_include_directories(chan PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-# 链接库
-target_link_libraries(chan PRIVATE
-    # Windows系统库（如需要）
-)
+# MSVC优化选项
+if(MSVC)
+    target_compile_options(chan PRIVATE /W3 /O2)
+endif()
 
 # 输出目录
 set_target_properties(chan PROPERTIES
@@ -137,24 +123,7 @@ if(MSVC)
     target_compile_options(chan_min PRIVATE /W3 /O2)
 endif()
 
-# ----------------------------------------------------------------------------
-# 标准接口完整版DLL（推荐使用）
-# ----------------------------------------------------------------------------
-add_library(chan_std SHARED
-    src/tdx_standard.cpp
-    chan_min.def
-)
-
-set_target_properties(chan_std PROPERTIES
-    OUTPUT_NAME "chan_std"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-)
-
-if(MSVC)
-    target_compile_options(chan_std PRIVATE /W3 /O2)
-endif()
+# chan_std 目标已合并到 chan 主目标（tdx_standard.cpp），不再单独构建
 
 # ----------------------------------------------------------------------------
 # 构建后复制到通达信目录（可选）
