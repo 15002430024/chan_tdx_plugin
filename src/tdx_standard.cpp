@@ -920,8 +920,12 @@ static void DumpBaselineCSV(const float* highs, const float* lows, const float* 
     if (g_BaselineDumped) return;
     g_BaselineDumped = true;
 
+    // 使用时间戳避免不同品种覆盖同名文件
+    SYSTEMTIME st;
+    GetLocalTime(&st);
     char filename[MAX_PATH];
-    sprintf(filename, "D:\\chan_baseline_%d.csv", count);
+    sprintf(filename, "D:\\chan_baseline_%d_%02d%02d%02d.csv",
+            count, st.wHour, st.wMinute, st.wSecond);
 
     FILE* fp = fopen(filename, "w");
     if (!fp) {

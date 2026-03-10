@@ -6,8 +6,8 @@
 
 - **项目名称**: 通达信缠论DLL插件 (chan_tdx_plugin)
 - **创建日期**: 2026-01-12
-- **最后更新**: 2026-03-08
-- **当前状态**: 🚧 开发中 - 落地计划v7.4 Step 4.1 编译验证通过
+- **最后更新**: 2026-03-10
+- **当前状态**: 🚧 开发中 - v7.5.1 Phase 0 回归基线采集完成，等待用户执行数据采集
 
 ---
 
@@ -964,6 +964,29 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 - 不再依赖 ZSKS/ZSJS(编号18/19) 起止点，改用 DLL 持续输出的 ZG/ZD
 - 新增 ZS_DIR(编号22) 中枢方向数据获取
 - 提供三种可选方案：A=灰色空心矩形(默认)，B=红绿区分颜色，C=上下沿横线+竖线
+
+---
+
+### [2026-03-10] - v7.5.1 Phase 0 回归基线采集准备
+
+**新增:**
+- `tdx_standard.cpp`: 添加临时 `DumpBaselineCSV()` 函数（约130行），在 `FullAnalyzeWithMA` 末尾调用
+  - 计算 BI/ZSZG/ZSZD/BSIG/SSIG/KXG/KXD 七列数据，逻辑与对应导出函数完全一致
+  - 输出到 `D:\chan_baseline_<count>.csv`，仅记录非零行
+  - `g_BaselineDumped` 静态标志确保每次 DLL 加载只导出一次
+- `test/baseline/README.md`: 基线数据目录说明
+- `backup/chan_v74.dll`: 当前生产 DLL 备份（140,288 bytes, 2026-03-08）
+- Git tag `v7.4-final`: 回归基线版本快照
+
+**待用户操作:**
+1. 将编译产物 `build/bin/Release/chan.dll` 复制到 `T0002/dlls/chan.dll`
+2. 启动通达信，打开 999999 日线 → 采集基线 CSV
+3. 重启通达信，打开 600519 5分钟 → 采集第二组基线 CSV
+4. 将 `D:\chan_baseline_*.csv` 拷贝到 `test/baseline/` 并重命名
+
+**编译验证:**
+- MSVC x86 Release 编译通过，0 errors / 0 warnings
+- 产物: `build/bin/Release/chan.dll` (146,432 bytes)
 
 ---
 
