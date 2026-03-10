@@ -39,7 +39,8 @@ if(MSVC)
 endif()
 
 # ----------------------------------------------------------------------------
-# 源文件（chan_core 仅用于测试目标，主 DLL 使用自包含的 tdx_standard.cpp）
+# 源文件
+# [v7.5] chan_core.cpp 为唯一算法真源，tdx_standard.cpp 为纯导出映射层
 # ----------------------------------------------------------------------------
 set(HEADER_FILES
     include/tdx_interface.h
@@ -50,12 +51,16 @@ set(HEADER_FILES
 )
 
 # ----------------------------------------------------------------------------
-# 主 DLL 目标（标准接口完整版，源自 tdx_standard.cpp，自包含）
+# 主 DLL 目标（链接 chan_core.cpp 统一算法）
 # ----------------------------------------------------------------------------
 add_library(chan SHARED
     src/tdx_standard.cpp
+    src/chan_core.cpp
+    src/logger.cpp
     chan.def
 )
+
+target_include_directories(chan PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # MSVC优化选项
 if(MSVC)

@@ -67,7 +67,8 @@ enum class FirstSellType {
     NONE = 0,
     TYPE_A = 1,     // 一卖A型（有缺口）
     TYPE_B = 2,     // 一卖B型（无缺口+幅度衰减）
-    TYPE_AAA = 3    // 一卖AAA型（增强型）
+    TYPE_AAA = 3,   // 一卖AAA型（增强型）
+    TYPE_C = 4      // [v7.5] 一卖C型（连涨四段以上）
 };
 
 // 二卖细分类型
@@ -153,10 +154,13 @@ struct KLine {
     bool     is_merged;     // 是否为合并K线
     int      merge_start;   // 合并起始索引
     int      merge_end;     // 合并结束索引
+    int      raw_high_idx;  // [v7.5] 高点来源的原始K线索引
+    int      raw_low_idx;   // [v7.5] 低点来源的原始K线索引
     
     KLine() : index(0), high(0), low(0), open(0), close(0), 
               volume(0), amount(0), is_merged(false), 
-              merge_start(0), merge_end(0) {}
+              merge_start(0), merge_end(0),
+              raw_high_idx(0), raw_low_idx(0) {}
 };
 
 // ============================================================================

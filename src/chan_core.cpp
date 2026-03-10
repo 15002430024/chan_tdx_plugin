@@ -103,12 +103,24 @@ bool ChanCore::HasIncludeRelation(const KLine& k1, const KLine& k2) const {
 void ChanCore::MergeKLine(KLine& target, const KLine& source, Direction dir) {
     if (dir == Direction::UP) {
         // 向上趋势：高点取高者，低点取高者
-        target.high = std::max(target.high, source.high);
-        target.low = std::max(target.low, source.low);
+        if (source.high > target.high) {
+            target.high = source.high;
+            target.raw_high_idx = source.index;
+        }
+        if (source.low > target.low) {
+            target.low = source.low;
+            target.raw_low_idx = source.index;
+        }
     } else {
         // 向下趋势：高点取低者，低点取低者
-        target.high = std::min(target.high, source.high);
-        target.low = std::min(target.low, source.low);
+        if (source.high < target.high) {
+            target.high = source.high;
+            target.raw_high_idx = source.index;
+        }
+        if (source.low < target.low) {
+            target.low = source.low;
+            target.raw_low_idx = source.index;
+        }
     }
     
     target.volume += source.volume;
@@ -154,6 +166,8 @@ int ChanCore::RemoveInclude(const float* highs, const float* lows, int count) {
     first.is_merged = false;
     first.merge_start = 0;
     first.merge_end = 0;
+    first.raw_high_idx = 0;
+    first.raw_low_idx = 0;
     m_merged_klines.push_back(first);
     m_raw_to_merged[0] = 0;
     
@@ -169,6 +183,8 @@ int ChanCore::RemoveInclude(const float* highs, const float* lows, int count) {
         curr.is_merged = false;
         curr.merge_start = i;
         curr.merge_end = i;
+        curr.raw_high_idx = i;
+        curr.raw_low_idx = i;
         
         // 判断是否存在包含关系
         if (HasIncludeRelation(last, curr)) {
@@ -269,7 +285,8 @@ int ChanCore::CheckFX() {
             fx.index = i;
             fx.type = type;
             fx.price = (type == FractalType::TOP) ? k2.high : k2.low;
-            fx.kline_idx = k2.merge_end;  // 使用合并K线的最后一根原始K线索引
+            // [v7.5] 使用高/低点实际来源的原始K线索引（与tdx_standard保持一致）
+            fx.kline_idx = (type == FractalType::TOP) ? k2.raw_high_idx : k2.raw_low_idx;
             fx.is_valid = true;
             fx.strength = 1;
             
@@ -622,42 +639,49 @@ void ChanCore::BuildBiSequence(int current_bar_idx) {
         }
         seq.direction = 0;
         
-        // 收集在当前K线之前完成的所有顶点和底点
-        std::vector<std::pair<float, int>> tops;    // (价格, K线索引)
-        std::vector<std::pair<float, int>> bottoms; // (价格, K线索引)
+        // [v7.5] 初始化HH/LL为9999（匹配tdx_standard：无有效数据时距离为9999）
+        for (int n = 0; n < 6; ++n) {
+            seq.HH[n] = 9999;
+            seq.LL[n] = 9999;
+        }
+        
+        // 收集截至 bar 的所有笔端点（含起点和终点，匹配 tdx_standard GetBiSequence）
+        std::vector<std::pair<int, float>> tops;    // (索引, 价格) - 顶点
+        std::vector<std::pair<int, float>> bottoms; // (索引, 价格) - 底点
         
         for (const auto& stroke : m_strokes) {
-            // 只考虑在当前K线之前完成的笔
-            if (stroke.end_idx > bar) {
-                continue;
-            }
+            if (!stroke.is_confirmed) continue;  // 未完成笔不纳入递归引用
+            if (stroke.end_idx > bar) break;
             
             if (stroke.direction == Direction::UP) {
-                // 向上笔：终点是顶点
-                tops.push_back({stroke.high, stroke.end_idx});
+                // 向上笔：终点是顶，起点是底
+                tops.push_back({stroke.end_idx, stroke.high});
+                if (bottoms.empty() || stroke.start_idx != bottoms.back().first) {
+                    bottoms.push_back({stroke.start_idx, stroke.low});
+                }
             } else {
-                // 向下笔：终点是底点
-                bottoms.push_back({stroke.low, stroke.end_idx});
+                // 向下笔：终点是底，起点是顶
+                bottoms.push_back({stroke.end_idx, stroke.low});
+                if (tops.empty() || stroke.start_idx != tops.back().first) {
+                    tops.push_back({stroke.start_idx, stroke.high});
+                }
             }
         }
         
-        // 按K线索引降序排序（最近的在前）
-        auto cmp = [](const std::pair<float, int>& a, const std::pair<float, int>& b) {
-            return a.second > b.second;
-        };
-        std::sort(tops.begin(), tops.end(), cmp);
-        std::sort(bottoms.begin(), bottoms.end(), cmp);
-        
-        // 填充 GG1-GG5, HH1-HH5
-        for (int i = 0; i < 5 && i < (int)tops.size(); ++i) {
-            seq.GG[i + 1] = tops[i].first;  // GG[1] = GG1
-            seq.HH[i + 1] = bar - tops[i].second;
+        // 填充 GG1-GG5（从最近到最远）
+        int top_count = (int)tops.size();
+        for (int i = 1; i <= 5 && i <= top_count; ++i) {
+            int idx = top_count - i;
+            seq.GG[i] = tops[idx].second;
+            seq.HH[i] = bar - tops[idx].first;
         }
         
-        // 填充 DD1-DD5, LL1-LL5
-        for (int i = 0; i < 5 && i < (int)bottoms.size(); ++i) {
-            seq.DD[i + 1] = bottoms[i].first;  // DD[1] = DD1
-            seq.LL[i + 1] = bar - bottoms[i].second;
+        // 填充 DD1-DD5
+        int bottom_count = (int)bottoms.size();
+        for (int i = 1; i <= 5 && i <= bottom_count; ++i) {
+            int idx = bottom_count - i;
+            seq.DD[i] = bottoms[idx].second;
+            seq.LL[i] = bar - bottoms[idx].first;
         }
         
         // 计算方向
@@ -675,9 +699,10 @@ int ChanCore::CalculateDirection(int bar_idx) const {
         return 0;
     }
     
-    // 找到当前K线所在的最近一笔
+    // [v7.5] 只考虑已确认笔，匹配 tdx_standard GetBiSequence 行为
     const Stroke* lastStroke = nullptr;
     for (auto it = m_strokes.rbegin(); it != m_strokes.rend(); ++it) {
+        if (!it->is_confirmed) continue;  // 跳过未完成笔
         if (it->end_idx <= bar_idx) {
             lastStroke = &(*it);
             break;
@@ -1066,8 +1091,8 @@ SecondBuyType ChanCore::CheckSecondBuy(int bar_idx, float low) const {
         return SecondBuyType::NONE;
     }
     
-    // 检查五段下跌条件
-    bool isFiveDown = (GG4 > GG3) && (GG4 > GG2) && (DD2 < DD3) && (DD2 < DD4);
+    // [v7.5] 五段下跌条件（匹配 tdx_standard：要求单调递减）
+    bool isFiveDown = (GG4 > GG3) && (GG3 > GG2) && (DD2 < DD3) && (DD3 < DD4);
     
     if (isFiveDown) {
         // 缺口条件：GG2 < DD4 AND GG1 > DD3
@@ -1198,6 +1223,17 @@ FirstSellType ChanCore::CheckFirstSell(int bar_idx, float high) const {
         }
     }
     
+    // [v7.5] 一卖C型：连涨四段以上（匹配 tdx_standard CheckFirstSell）
+    float GG4 = GetGG(bar_idx, 4);
+    float GG5 = GetGG(bar_idx, 5);
+    if (GG4 > 0 && GG5 > 0) {
+        float GG1 = GetGG(bar_idx, 1);
+        float GG2 = GetGG(bar_idx, 2);
+        if (GG1 > GG2 && GG2 > GG3 && GG3 > GG4 && GG4 > GG5) {
+            return FirstSellType::TYPE_C;
+        }
+    }
+    
     return FirstSellType::NONE;
 }
 
@@ -1276,8 +1312,8 @@ SecondSellType ChanCore::CheckSecondSell(int bar_idx, float high) const {
         return SecondSellType::NONE;
     }
     
-    // 五段上涨条件（镜像）
-    bool isFiveUp = (DD4 < DD3) && (DD4 < DD2) && (GG2 > GG3) && (GG2 > GG4);
+    // [v7.5] 五段上涨条件（镜像，匹配 tdx_standard：要求单调递增）
+    bool isFiveUp = (DD4 < DD3) && (DD3 < DD2) && (GG2 > GG3) && (GG3 > GG4);
     
     if (isFiveUp) {
         // 缺口条件（镜像）：DD2 > GG4 AND DD1 < GG3

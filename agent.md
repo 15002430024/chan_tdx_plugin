@@ -7,7 +7,7 @@
 - **项目名称**: 通达信缠论DLL插件 (chan_tdx_plugin)
 - **创建日期**: 2026-01-12
 - **最后更新**: 2026-03-10
-- **当前状态**: 🚧 开发中 - v7.5.1 Phase 0 回归基线采集完成，等待用户执行数据采集
+- **当前状态**: 🚧 开发中 - v7.5.1 Phase 3 完成（版本号统一），下一步 Phase 4 回归测试发布闸门
 
 ---
 
@@ -17,7 +17,7 @@
 
 | 功能 | 状态 | 实现日期 | 说明 |
 |------|------|----------|------|
-| CMake 构建系统 | ✅ 完成 | 2026-03-06 | 统一DLL产物：chan主目标源自 tdx_standard.cpp，产出 chan.dll |
+| CMake 构建系统 | ✅ 完成 | 2026-03-10 | [v7.5] chan DLL 链接 tdx_standard.cpp + chan_core.cpp + logger.cpp |
 | 通达信接口框架 | ✅ 完成 | 2026-01-12 | 18个导出函数已实现 |
 | 日志系统 | ✅ 完成 | 2026-01-12 | 支持文件和控制台输出 |
 | 基础数据类型定义 | ✅ 完成 | 2026-01-12 | KLine/Fractal/Stroke/Pivot/BiSequenceData |
@@ -967,26 +967,65 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 
 ---
 
-### [2026-03-10] - v7.5.1 Phase 0 回归基线采集准备
+### [2026-03-10] - v7.5.1 Phase 1 Step 1.1+1.2 架构收敛开始
 
-**新增:**
-- `tdx_standard.cpp`: 添加临时 `DumpBaselineCSV()` 函数（约130行），在 `FullAnalyzeWithMA` 末尾调用
-  - 计算 BI/ZSZG/ZSZD/BSIG/SSIG/KXG/KXD 七列数据，逻辑与对应导出函数完全一致
-  - 输出到 `D:\chan_baseline_<count>.csv`，仅记录非零行
-  - `g_BaselineDumped` 静态标志确保每次 DLL 加载只导出一次
-- `test/baseline/README.md`: 基线数据目录说明
-- `backup/chan_v74.dll`: 当前生产 DLL 备份（140,288 bytes, 2026-03-08）
-- Git tag `v7.4-final`: 回归基线版本快照
+**Phase 0 完成:**
+- 基线数据已采集并保存:
+  - `test/baseline/baseline_999999_daily.csv`: 上证指数日线 (420 bars, 243 非零行)
+  - `test/baseline/baseline_600519_daily.csv`: 贵州茅台日线 (420 bars, 340 非零行)
+- Git tag `v7.4-final` 已打
+- DLL 已备份到 `backup/chan_v74.dll`
 
-**待用户操作:**
-1. 将编译产物 `build/bin/Release/chan.dll` 复制到 `T0002/dlls/chan.dll`
-2. 启动通达信，打开 999999 日线 → 采集基线 CSV
-3. 重启通达信，打开 600519 5分钟 → 采集第二组基线 CSV
-4. 将 `D:\chan_baseline_*.csv` 拷贝到 `test/baseline/` 并重命名
+**Step 1.1 完成 — 禁用粗缓存:**
+- 注释掉 `FullAnalyzeWithMA` 中只检查首bar的缓存判断
+- 确保实时行情下尾bar跳动时每次都重算
+
+**Step 1.2 完成 — 接通 CZSC.ini:**
+- 添加 `LoadConfig()` 函数，通过 `GetPrivateProfileIntA` 读取 DLL 同目录下的 CZSC.ini
+- 键名: `min_bi_length` (g_MinBiLen=5), `min_zs_bi_count` (g_MinZsBiCount=3)
+- `CheckBI(g_MinBiLen); CheckZS(g_MinZsBiCount);` 替代硬编码
+- CZSC.ini 添加标准键名（保留旧驼峰键名兼容）
 
 **编译验证:**
 - MSVC x86 Release 编译通过，0 errors / 0 warnings
-- 产物: `build/bin/Release/chan.dll` (146,432 bytes)
+
+---
+
+### [2026-03-10] - v7.5.1 Phase 1 Step 1.3 统一算法到 chan_core.cpp
+
+**核心变更 — "单一真源" 架构:**
+- `chan_core.cpp` 为唯一算法实现（去包含、分型、笔、中枢、买卖点）
+- `tdx_standard.cpp` 缩减为纯导出映射层（~500行 vs 原~1700行）
+  - 仅保留：RegisterTdxFunc + 22个 pfOUT 填充函数 + CalcMA + LoadConfig + WriteLog
+  - 所有判定逻辑通过 `static chan::ChanCore g_Core` 调用
+  - 删除全部本地结构体定义、算法函数、DumpBaselineCSV
+
+**chan_types.h 更新:**
+- KLine 结构新增 `raw_high_idx` / `raw_low_idx`（高低点来源的原始K线索引）
+- FirstSellType 枚举新增 `TYPE_C = 4`（一卖C型：连涨四段以上）
+
+**chan_core.cpp 修复（8处，对齐 tdx_standard 逻辑）:**
+1. RemoveInclude: 首根K线 raw_high_idx=0, raw_low_idx=0；新K线 raw_high_idx=i, raw_low_idx=i
+2. MergeKLine: 条件式更新 raw_high_idx/raw_low_idx（UP方向取更高者、DOWN方向取更低者）
+3. CheckFX: 顶分型 kline_idx=raw_high_idx，底分型 kline_idx=raw_low_idx（原为 merge_end）
+4. BuildBiSequence: 完整重写 — 包含笔起终点、过滤未完成笔、HH/LL 初始化为 9999
+5. CalculateDirection: 新增 `is_confirmed` 过滤（跳过未完成笔）
+6. CheckSecondBuy: 五段下跌条件改为严格单调 GG4>GG3>GG2, DD2<DD3<DD4
+7. CheckSecondSell: 五段上涨条件改为严格单调 DD4<DD3<DD2, GG2>GG3>GG4
+8. CheckFirstSell: 新增 TYPE_C 检查（连涨四段 GG1>GG2>GG3>GG4>GG5）
+
+**CMakeLists.txt 更新:**
+- chan DLL 目标链接: tdx_standard.cpp + chan_core.cpp + logger.cpp
+- 新增 target_include_directories(chan PRIVATE include/)
+
+**编译验证:**
+- MSVC x86 Release: 0 errors / 0 warnings
+- chan.dll 161KB（v7.4 为 140KB，因合并 chan_core+logger）
+- test_chan_core.exe: 全部测试通过（exit code 0）
+- DLL 导出: RegisterTdxFunc @1 ✓
+
+**备份:**
+- `backup/tdx_standard_v74.cpp`：重写前的原始文件
 
 ---
 
@@ -1057,3 +1096,40 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 **影响范围:**
 - 笔端点位置更精确，画线将准确连接K线影线尖端
 - 买卖点判断不受影响（使用价格而非坐标）
+
+---
+
+### [2026-03-10] - v7.5.1 Phase 2 Step 2.1+2.2 视觉修正（备用件）
+
+**Step 2.1 完成 — 修复买卖点锚定:**
+- `formulas/缠论完整指标.txt`: 新增 BPOS/SPOS 锚点变量，买点锚定到笔底端点(KXD*0.998)，卖点锚定到笔顶端点(KXG*1.002)
+- `formulas/缠论买卖点.txt`: 新增 KXG/KXD/BPOS/SPOS，所有 L*0.98/0.97/0.96 → BPOS，所有 H*1.02/1.03/1.04 → SPOS
+- 修复问题：买卖点文字远离实际峰/谷，现在精准锚定到笔端点价格
+
+**Step 2.2 完成 — 修复中枢画法:**
+- `formulas/缠论完整指标.txt`: 中枢从 STICKLINE 填充(4,1) 改为边框画法（上下沿横线+左右竖线+中轴虚线）
+  - 上涨中枢: 红色边框 (COLORRED)
+  - 下跌中枢: 绿色边框 (COLOR1D7300)
+  - 中轴: 灰色虚线 (COLORDARKGRAY)
+- `formulas/缠论中枢.txt`: 注释掉方案B（填充式），启用方案C（边框式）
+  - 方案B 产生栅栏/黑块過捣K线，已停用
+  - 方案C 与缠论主图_chan.txt 一致，上下沿+左右竖线+中轴
+
+**注意:** 以上均为备用件修改，不部署到生产。正式发布件仅 `缠论主图_chan.txt`。
+
+---
+
+### [2026-03-10] - v7.5.1 Phase 3 Step 3.1 版本号统一
+
+**修改:**
+- `src/dllmain.cpp`: DllMain 日志从 `版本: 1.0.0` 改为 `版本: 7.5.0`
+- `formulas/缠论完整指标.txt`: 头注释从 `v7.4` 改为 `v7.5`
+- `formulas/缠论买卖点.txt`: 头注释从 `v7.4` 改为 `v7.5`
+- `formulas/缠论中枢.txt`: 头注释从 `v7.4` 改为 `v7.5`
+- `formulas/缠论主图_chan.txt`: 添加版本号 `v7.5`
+- `tdx_standard.cpp` 头注释和 `RegisterTdxFunc` 日志已在 Phase 1 中更新为 v7.5，本步确认无需修改
+
+**编译验证:**
+- MSVC x86 Release 编译通过，0 errors / 0 warnings
+- test_chan_core.exe: 50/50 测试全部通过
+- chan.dll 已部署到 T0002/dlls/

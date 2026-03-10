@@ -20,7 +20,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         chan::LogInit(chan::LogLevel::LOG_WARN);
         #endif
         
-        CHAN_LOG_INFO("chan.dll 已加载 (版本: 1.0.0)");
+        CHAN_LOG_INFO("chan.dll 已加载 (版本: 7.5.0)");
         break;
         
     case DLL_PROCESS_DETACH:

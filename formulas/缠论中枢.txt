@@ -1,4 +1,4 @@
-{缠论中枢 v7.4 - 主图叠加}
+{缠论中枢 v7.5 - 主图叠加}
 {利用 DLL 持续输出的 ZG/ZD 画矩形，不再依赖 ZSKS/ZSJS 起止点}
 
 {==== 获取中枢数据 ====}
@@ -12,14 +12,26 @@ ZS_DIR:=TDXDLL1(22, H, L, C);
 {==== 方案A：统一灰色空心矩形 ====}
 {STICKLINE(在中枢内, ZSZG, ZSZD, 4, 1), COLORGRAY;}
 
-{==== 方案B：区分颜色（当前启用）====}
-STICKLINE(在中枢内 AND ZS_DIR>0, ZSZG, ZSZD, 4, 1), COLORRED;
-STICKLINE(在中枢内 AND ZS_DIR<0, ZSZG, ZSZD, 4, 1), COLORGREEN;
+{==== 方案B：区分颜色（已停用 — 填充式产生栅栏效应）====}
+{STICKLINE(在中枢内 AND ZS_DIR>0, ZSZG, ZSZD, 4, 1), COLORRED;}
+{STICKLINE(在中枢内 AND ZS_DIR<0, ZSZG, ZSZD, 4, 1), COLORGREEN;}
 
-{==== 方案C：备选 - 如方案A出现栅栏效应，改用上下沿横线+左右竖线 ====}
-{ZSKS:=TDXDLL1(18, H, L, C);}
-{ZSJS:=TDXDLL1(19, H, L, C);}
-{STICKLINE(在中枢内, ZSZG, ZSZG, 4, 0), COLORRED;}
-{STICKLINE(在中枢内, ZSZD, ZSZD, 4, 0), COLORRED;}
-{STICKLINE(ZSKS>0, ZSZG, ZSZD, 0.1, 0), COLORRED;}
-{STICKLINE(ZSJS>0, ZSZG, ZSZD, 0.1, 0), COLORRED;}
+{==== 方案C：边框画法（当前启用）====}
+ZSKS:=TDXDLL1(18, H, L, C);
+ZSJS:=TDXDLL1(19, H, L, C);
+ZZ:=(ZSZG+ZSZD)/2;
+
+{上涨中枢边框 — 红色}
+STICKLINE(在中枢内 AND ZS_DIR>0, ZSZG, ZSZG, 0.2, 0), COLORRED;
+STICKLINE(在中枢内 AND ZS_DIR>0, ZSZD, ZSZD, 0.2, 0), COLORRED;
+STICKLINE(ZSKS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
+STICKLINE(ZSJS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
+
+{下跌中枢边框 — 绿色}
+STICKLINE(在中枢内 AND ZS_DIR<0, ZSZG, ZSZG, 0.2, 0), COLOR1D7300;
+STICKLINE(在中枢内 AND ZS_DIR<0, ZSZD, ZSZD, 0.2, 0), COLOR1D7300;
+STICKLINE(ZSKS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
+STICKLINE(ZSJS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
+
+{中轴虚线}
+STICKLINE(在中枢内, ZZ, ZZ, 0.1, 0), COLOR808080;

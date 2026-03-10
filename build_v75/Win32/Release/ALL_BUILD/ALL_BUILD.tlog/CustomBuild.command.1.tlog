@@ -1,0 +1,10 @@
+^D:\DESKTOP\通达信中枢安装包\CHAN_TDX_PLUGIN\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/Desktop/通达信中枢安装包/chan_tdx_plugin -BD:/Desktop/通达信中枢安装包/chan_tdx_plugin/build_v75 --check-stamp-file D:/Desktop/通达信中枢安装包/chan_tdx_plugin/build_v75/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
