@@ -877,6 +877,9 @@ static int CheckPreThirdSell(int kline_idx, float high, const BiSequenceData& se
 // 完整分析流程（带均线计算）
 // ============================================================================
 
+// [v7.5 TEMPORARY] 前向声明 — 回归基线导出（Phase 1 开始后删除）
+static void DumpBaselineCSV(const float* highs, const float* lows, const float* closes, int count);
+
 static void FullAnalyzeWithMA(const float* highs, const float* lows, const float* closes, int count) {
     // 检查是否需要重新计算
     if (count == g_LastCount && count > 0 &&
@@ -903,6 +906,152 @@ static void FullAnalyzeWithMA(const float* highs, const float* lows, const float
     CheckFX();
     CheckBI(5);
     CheckZS(3);
+
+    // [v7.5 TEMPORARY] 回归基线采集 — Phase 1 开始后删除此段
+    DumpBaselineCSV(highs, lows, closes, count);
+}
+
+// ============================================================================
+// [v7.5 TEMPORARY] 回归基线 CSV 导出 — Phase 1 开始后删除此函数
+// ============================================================================
+static bool g_BaselineDumped = false;
+
+static void DumpBaselineCSV(const float* highs, const float* lows, const float* closes, int count) {
+    if (g_BaselineDumped) return;
+    g_BaselineDumped = true;
+
+    char filename[MAX_PATH];
+    sprintf(filename, "D:\\chan_baseline_%d.csv", count);
+
+    FILE* fp = fopen(filename, "w");
+    if (!fp) {
+        WriteLog("[Baseline] ERROR: Failed to open output file");
+        return;
+    }
+
+    // 分配临时数组
+    std::vector<float> bi(count, 0.0f);
+    std::vector<float> zszg(count, 0.0f);
+    std::vector<float> zszd(count, 0.0f);
+    std::vector<float> bsig(count, 0.0f);
+    std::vector<float> ssig(count, 0.0f);
+    std::vector<float> kxg(count, 0.0f);
+    std::vector<float> kxd(count, 0.0f);
+
+    // --- BI 笔端点 (同 BiDuanDian 逻辑) ---
+    for (const Stroke& s : g_Strokes) {
+        if (s.direction == 1) {
+            if (s.start_idx >= 0 && s.start_idx < count) bi[s.start_idx] = -1.0f;
+            if (s.end_idx >= 0 && s.end_idx < count) bi[s.end_idx] = 1.0f;
+        } else if (s.direction == -1) {
+            if (s.start_idx >= 0 && s.start_idx < count) bi[s.start_idx] = 1.0f;
+            if (s.end_idx >= 0 && s.end_idx < count) bi[s.end_idx] = -1.0f;
+        }
+    }
+
+    // --- ZSZG / ZSZD 中枢高低 (同 ZhongShuGao/ZhongShuDi 逻辑) ---
+    {
+        size_t pivotCount = g_Pivots.size();
+        for (size_t p = 0; p < pivotCount; ++p) {
+            const Pivot& zs = g_Pivots[p];
+            int actual_end = zs.end_idx;
+            if (p + 1 < pivotCount && zs.end_idx >= g_Pivots[p + 1].start_idx) {
+                actual_end = g_Pivots[p + 1].start_idx - 1;
+            }
+            for (int i = zs.start_idx; i <= actual_end && i < count; ++i) {
+                if (i >= 0) {
+                    zszg[i] = zs.zg;
+                    zszd[i] = zs.zd;
+                }
+            }
+        }
+    }
+
+    // --- BSIG 买点信号 (同 BuySignal 逻辑) ---
+    for (const Stroke& s : g_Strokes) {
+        if (!s.is_confirmed) continue;
+        if (s.direction != -1) continue;
+        int idx = s.end_idx;
+        if (idx < 0 || idx >= count) continue;
+        float low = lows[idx];
+        float ma13 = (idx < (int)g_MA13.size()) ? g_MA13[idx] : low;
+        float ma26 = (idx < (int)g_MA26.size()) ? g_MA26[idx] : low;
+        BiSequenceData seq = GetBiSequence(idx);
+        int signal = 0;
+        signal = CheckFirstBuy(idx, low, ma13, seq);
+        if (signal > 0) { bsig[idx] = (float)signal; continue; }
+        signal = CheckSecondBuy(idx, low, ma26, seq);
+        if (signal > 0) { bsig[idx] = (float)signal; continue; }
+        signal = CheckThirdBuy(idx, low, ma13, seq, g_Pivots);
+        if (signal > 0) { bsig[idx] = (float)signal; continue; }
+        signal = CheckPreFirstBuy(idx, low, ma13, seq);
+        if (signal > 0) { bsig[idx] = (float)signal; continue; }
+        signal = CheckPreSecondBuy(idx, low, ma26, seq);
+        if (signal > 0) { bsig[idx] = (float)signal; continue; }
+        signal = CheckPreThirdBuy(idx, low, seq);
+        if (signal > 0) { bsig[idx] = (float)signal; continue; }
+    }
+
+    // --- SSIG 卖点信号 (同 SellSignal 逻辑) ---
+    for (const Stroke& s : g_Strokes) {
+        if (!s.is_confirmed) continue;
+        if (s.direction != 1) continue;
+        int idx = s.end_idx;
+        if (idx < 0 || idx >= count) continue;
+        float high = highs[idx];
+        float ma13 = (idx < (int)g_MA13.size()) ? g_MA13[idx] : high;
+        float ma26 = (idx < (int)g_MA26.size()) ? g_MA26[idx] : high;
+        BiSequenceData seq = GetBiSequence(idx);
+        int signal = 0;
+        signal = CheckFirstSell(idx, high, ma13, seq);
+        if (signal < 0) { ssig[idx] = (float)signal; continue; }
+        signal = CheckSecondSell(idx, high, ma26, seq);
+        if (signal < 0) { ssig[idx] = (float)signal; continue; }
+        signal = CheckThirdSell(idx, high, ma13, seq);
+        if (signal < 0) { ssig[idx] = (float)signal; continue; }
+        signal = CheckPreFirstSell(idx, high, ma13, seq);
+        if (signal < 0) { ssig[idx] = (float)signal; continue; }
+        signal = CheckPreSecondSell(idx, high, ma26, seq);
+        if (signal < 0) { ssig[idx] = (float)signal; continue; }
+        signal = CheckPreThirdSell(idx, high, seq);
+        if (signal < 0) { ssig[idx] = (float)signal; continue; }
+    }
+
+    // --- KXG 顶端点价格 (同 BiGaoDian 逻辑) ---
+    for (const Stroke& s : g_Strokes) {
+        if (s.direction == 1 && s.end_idx >= 0 && s.end_idx < count) {
+            kxg[s.end_idx] = s.end_price;
+        } else if (s.direction == -1 && s.start_idx >= 0 && s.start_idx < count) {
+            kxg[s.start_idx] = s.start_price;
+        }
+    }
+
+    // --- KXD 底端点价格 (同 BiDiDian 逻辑) ---
+    for (const Stroke& s : g_Strokes) {
+        if (s.direction == -1 && s.end_idx >= 0 && s.end_idx < count) {
+            kxd[s.end_idx] = s.end_price;
+        } else if (s.direction == 1 && s.start_idx >= 0 && s.start_idx < count) {
+            kxd[s.start_idx] = s.start_price;
+        }
+    }
+
+    // 写入 CSV
+    fprintf(fp, "bar_index,BI,ZSZG,ZSZD,BSIG,SSIG,KXG,KXD\n");
+    int nonZeroRows = 0;
+    for (int i = 0; i < count; ++i) {
+        if (bi[i] != 0 || zszg[i] != 0 || zszd[i] != 0 ||
+            bsig[i] != 0 || ssig[i] != 0 || kxg[i] != 0 || kxd[i] != 0) {
+            fprintf(fp, "%d,%.0f,%.4f,%.4f,%.0f,%.0f,%.4f,%.4f\n",
+                    i, bi[i], zszg[i], zszd[i], bsig[i], ssig[i], kxg[i], kxd[i]);
+            nonZeroRows++;
+        }
+    }
+    fclose(fp);
+
+    char logMsg[256];
+    sprintf(logMsg, "[Baseline] Dumped %d non-zero rows (total %d bars) to %s",
+            nonZeroRows, count, filename);
+    WriteLog(logMsg);
 }
 
 // ============================================================================
