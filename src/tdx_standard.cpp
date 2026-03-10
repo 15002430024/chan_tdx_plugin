@@ -48,6 +48,41 @@ static void WriteLog(const char* msg) {
 }
 
 // ============================================================================
+// [v7.5] 简易配置读取
+// ============================================================================
+
+static int g_MinBiLen = 5;
+static int g_MinZsBiCount = 3;
+static bool g_ConfigLoaded = false;
+
+static void LoadConfig() {
+    if (g_ConfigLoaded) return;
+    g_ConfigLoaded = true;
+
+    // 获取 DLL 所在目录
+    char dllPath[MAX_PATH] = {0};
+    HMODULE hMod = NULL;
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                       (LPCSTR)&LoadConfig, &hMod);
+    GetModuleFileNameA(hMod, dllPath, MAX_PATH);
+
+    // 替换文件名为 CZSC.ini
+    char* lastSlash = strrchr(dllPath, '\\');
+    if (lastSlash) {
+        strcpy(lastSlash + 1, "CZSC.ini");
+    }
+
+    // 键名必须与 CZSC.ini 完全一致：min_bi_length, min_zs_bi_count
+    g_MinBiLen = GetPrivateProfileIntA("General", "min_bi_length", 5, dllPath);
+    g_MinZsBiCount = GetPrivateProfileIntA("General", "min_zs_bi_count", 3, dllPath);
+
+    char logMsg[256];
+    sprintf(logMsg, "[v7.5] Config: min_bi_length=%d, min_zs_bi_count=%d, path=%s",
+            g_MinBiLen, g_MinZsBiCount, dllPath);
+    WriteLog(logMsg);
+}
+
+// ============================================================================
 // 缠论核心数据结构
 // ============================================================================
 
@@ -881,11 +916,12 @@ static int CheckPreThirdSell(int kline_idx, float high, const BiSequenceData& se
 static void DumpBaselineCSV(const float* highs, const float* lows, const float* closes, int count);
 
 static void FullAnalyzeWithMA(const float* highs, const float* lows, const float* closes, int count) {
-    // 检查是否需要重新计算
-    if (count == g_LastCount && count > 0 &&
-        highs[0] == g_LastHigh0 && lows[0] == g_LastLow0) {
-        return;  // 数据未变，使用缓存
-    }
+    // [v7.5] 暂时禁用缓存，确保每次调用都重算
+    // TODO: 后续恢复时至少比较 count + highs[count-1] + lows[count-1] + closes[count-1]
+    // if (count == g_LastCount && count > 0 &&
+    //     highs[0] == g_LastHigh0 && lows[0] == g_LastLow0) {
+    //     return;  // 数据未变，使用缓存
+    // }
     
     g_LastCount = count;
     g_LastHigh0 = (count > 0) ? highs[0] : 0;
@@ -902,10 +938,11 @@ static void FullAnalyzeWithMA(const float* highs, const float* lows, const float
     CalcMA(closes, count, 26, g_MA26);
     
     // 基础分析
+    LoadConfig();
     RemoveInclude(highs, lows, count);
     CheckFX();
-    CheckBI(5);
-    CheckZS(3);
+    CheckBI(g_MinBiLen);
+    CheckZS(g_MinZsBiCount);
 
     // [v7.5 TEMPORARY] 回归基线采集 — Phase 1 开始后删除此段
     DumpBaselineCSV(highs, lows, closes, count);
