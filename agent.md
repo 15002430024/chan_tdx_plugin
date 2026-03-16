@@ -6,8 +6,8 @@
 
 - **项目名称**: 通达信缠论DLL插件 (chan_tdx_plugin)
 - **创建日期**: 2026-01-12
-- **最后更新**: 2026-03-10
-- **当前状态**: 🚧 开发中 - v7.5.1 Phase 3 完成（版本号统一），下一步 Phase 4 回归测试发布闸门
+- **最后更新**: 2026-03-17
+- **当前状态**: 🚧 开发中 - v7.5.1 匹配模型切换完成（最新匹配+BACKSET），下一步 Phase 4 回归测试发布闸门
 
 ---
 
@@ -1133,3 +1133,57 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 - MSVC x86 Release 编译通过，0 errors / 0 warnings
 - test_chan_core.exe: 50/50 测试全部通过
 - chan.dll 已部署到 T0002/dlls/
+
+---
+
+### [2026-03-16] - v7.5.1 匹配模型切换：稳健匹配 → 最新匹配
+
+**核心变更 — 匹配模型升级:**
+- 旧模型（稳健匹配）：公式层用 GG/DD 序列实时计算买卖点，每根 bar 基于当时的笔序列状态独立判断
+- 新模型（最新匹配）：DLL 的 BuySignal/SellSignal 在笔终点 bar 输出信号，公式层用 BACKSET 回写到笔端点 bar
+
+**公式层重写 — `formulas/缠论主图_chan.txt`:**
+- 版本号从 `v7.5` 升级到 `v7.5.1`
+- 删除全部公式层买卖点计算逻辑（约80行）:
+  - 删除：方向计算、GG/DD序列、均线、一买/二买/三买/类二买、一卖/二卖/三卖 全部条件判断
+  - 删除：H1/L1/HH1/LL1 笔距离计算
+- 新增 DLL 信号获取：
+  - `BSIG:=TDXDLL1(7, H, L, C)` 买点信号
+  - `SSIG:=TDXDLL1(8, H, L, C)` 卖点信号
+- 新增 BACKSET 端点回写逻辑：
+  - 买点：`BACKSET(BSIG=N, BOTN+1) AND BI=-1` 回写到最近底端点
+  - 卖点：`BACKSET(SSIG=-N, TOPN+1) AND BI=1` 回写到最近顶端点
+  - 覆盖所有信号类型：一买A/B、二买A/B1/B2、三买、一卖A/B/C、二卖A/B1/B2、三卖
+- DRAWTEXT 锚点从 `REF(L,1)` / `REF(H,1)` 改为 `KXD*0.998` / `KXG*1.002`（精准锚定到笔端点价格）
+- 买卖点配色优化：买点红(FF0000)/蓝(0066FF)/品红，卖点绿(00CC00)/橙(FFAA00)/白
+- 保留 `BSIG_RAW` / `SSIG_RAW` 原始信号变量，供实时预警使用
+
+**配置文件更新:**
+- `CZSC.ini` 版本号从 `v1.0` 升级到 `v7.5.1`
+- 新增注释：`匹配模型: 最新匹配`
+- 同步更新 `T0002/dlls/CZSC.ini` 和 `chan_tdx_plugin/CZSC.ini`
+
+**笔/中枢/涨停板画法:** 完全保留不变（DRAWLINE/STICKLINE 部分未做任何修改）
+
+**DLL 无需修改:** BuySignal(编号7)/SellSignal(编号8) 已在笔终点 bar 输出信号，BACKSET 由公式层完成
+
+---
+
+### [2026-03-17] - v7.5.1 修正：BACKSET 应用到生产文件（而非参考文件）
+
+**问题:** 上次误将 BACKSET 写入 `缠论主图_chan.txt`（工程师参考文件，只读）后被回滚
+
+**修正:**
+- `缠论主图_chan.txt` — 已恢复为 v7.5 原始状态（参考文件，不做修改）
+- `formulas/缠论买卖点.txt` — 升级到 v7.5.1，应用 BACKSET 最新匹配
+- `formulas/缠论完整指标.txt` — 升级到 v7.5.1，应用 BACKSET 最新匹配
+- `formulas/缠论中枢.txt` — 无买卖点逻辑，无需变更
+
+**BACKSET 结构（两个文件相同模式）:**
+```
+BOTN:=BARSLAST(BI=-1);         {距最近底端点bar数}
+TOPN:=BARSLAST(BI=1);          {距最近顶端点bar数}
+B1A:=BACKSET(BSIG=1,  BOTN+1) AND BI=-1;   {买点锁到底端点}
+S1A:=BACKSET(SSIG=-1, TOPN+1) AND BI=1;    {卖点锁到顶端点}
+DRAWTEXT(B1A, BPOS, 'B1A')    {标注在端点bar上}
+```
