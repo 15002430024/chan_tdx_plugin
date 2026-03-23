@@ -1834,15 +1834,21 @@ TEST_CASE(SignalOutput_ConfirmedEndpointsOnly) {
     core.CheckBI();
     core.BuildBiSequence(count - 1);
 
+    float buy[20] = {0};
+    float sell[20] = {0};
     float pre_buy[20] = {0};
     float combined_buy[20] = {0};
+    core.OutputBuySignal(buy, count, lows);
+    core.OutputSellSignal(sell, count, highs);
     core.OutputPreBuySignal(pre_buy, count, lows);
     core.OutputCombinedBuySignal(combined_buy, count, lows);
 
+    int buy_count = 0;
+    int sell_count = 0;
     int pre_count = 0;
     int combined_count = 0;
     for (int i = 0; i < count; ++i) {
-        if (pre_buy[i] != 0.0f || combined_buy[i] != 0.0f) {
+        if (buy[i] != 0.0f || pre_buy[i] != 0.0f || combined_buy[i] != 0.0f) {
             bool is_confirmed_bottom = false;
             for (const auto& stroke : core.GetStrokes()) {
                 if (stroke.is_confirmed &&
@@ -1854,11 +1860,28 @@ TEST_CASE(SignalOutput_ConfirmedEndpointsOnly) {
             }
             ASSERT_TRUE(is_confirmed_bottom);
         }
+        if (sell[i] != 0.0f) {
+            bool is_confirmed_top = false;
+            for (const auto& stroke : core.GetStrokes()) {
+                if (stroke.is_confirmed &&
+                    stroke.direction == chan::Direction::UP &&
+                    stroke.end_idx == i) {
+                    is_confirmed_top = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(is_confirmed_top);
+        }
+        if (buy[i] != 0.0f) buy_count++;
+        if (sell[i] != 0.0f) sell_count++;
         if (pre_buy[i] != 0.0f) pre_count++;
         if (combined_buy[i] != 0.0f) combined_count++;
     }
 
-    std::cout << "\n  pre_buy_count=" << pre_count << ", combined_buy_count=" << combined_count;
+    std::cout << "\n  buy_count=" << buy_count
+              << ", sell_count=" << sell_count
+              << ", pre_buy_count=" << pre_count
+              << ", combined_buy_count=" << combined_count;
 }
 
 // ----------------------------------------------------------------------------

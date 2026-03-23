@@ -10,6 +10,10 @@
 #include <cmath>
 #include <memory>
 #include <chrono>
+#include <vector>
+
+static std::vector<float> g_MA13;
+static std::vector<float> g_MA26;
 
 // ============================================================================
 // 函数信息定义
@@ -67,6 +71,54 @@ static bool NeedRecalculate(int nCount) {
         return true;
     }
     return false;
+}
+
+static void CalcMA(const float* closes, int count, int period, std::vector<float>& ma) {
+    ma.clear();
+    if (!closes || count <= 0 || period <= 0) {
+        return;
+    }
+
+    ma.resize(count);
+    float rolling_sum = 0.0f;
+    for (int i = 0; i < count; ++i) {
+        rolling_sum += closes[i];
+        if (i >= period) {
+            rolling_sum -= closes[i - period];
+        }
+
+        if (i < period - 1) {
+            ma[i] = closes[i];
+        } else {
+            ma[i] = rolling_sum / static_cast<float>(period);
+        }
+    }
+}
+
+// 兼容 CHAN.DLL 的信号接口也走完整分析，避免和标准 TDXDLL1 的笔序列脱节。
+static void AnalyzeWithMA(const float* highs,
+                          const float* lows,
+                          const float* closes,
+                          const float* volumes,
+                          int count) {
+    if (!g_ChanCore || !highs || !lows || count <= 0) {
+        return;
+    }
+
+    g_ChanCore->Analyze(highs, lows, closes, volumes, count);
+    g_LastCount = count;
+
+    if (closes) {
+        CalcMA(closes, count, 13, g_MA13);
+        CalcMA(closes, count, 26, g_MA26);
+        g_ChanCore->SetMAData(g_MA13.data(), g_MA26.data(), count);
+    } else {
+        g_MA13.clear();
+        g_MA26.clear();
+        g_ChanCore->SetMAData(nullptr, nullptr, 0);
+    }
+
+    g_ChanCore->BuildBiSequence(count - 1);
 }
 
 // ============================================================================
@@ -402,10 +454,7 @@ void __stdcall CHAN_BUY_Calc(int nCount, float* pOut, float* pHigh, float* pLow,
     
     EnsureChanCore();
     
-    g_ChanCore->RemoveInclude(pHigh, pLow, nCount);
-    g_ChanCore->CheckFX();
-    g_ChanCore->CheckBI();
-    g_ChanCore->BuildBiSequence(nCount - 1);
+    AnalyzeWithMA(pHigh, pLow, pClose, pVol, nCount);
     
     // 输出买点信号 (传入low数组用于价格比较)
     g_ChanCore->OutputBuySignal(pOut, nCount, pLow);
@@ -424,10 +473,7 @@ void __stdcall CHAN_SELL_Calc(int nCount, float* pOut, float* pHigh, float* pLow
     
     EnsureChanCore();
     
-    g_ChanCore->RemoveInclude(pHigh, pLow, nCount);
-    g_ChanCore->CheckFX();
-    g_ChanCore->CheckBI();
-    g_ChanCore->BuildBiSequence(nCount - 1);
+    AnalyzeWithMA(pHigh, pLow, pClose, pVol, nCount);
     
     // 输出卖点信号 (传入high数组用于价格比较)
     g_ChanCore->OutputSellSignal(pOut, nCount, pHigh);
@@ -600,7 +646,7 @@ void __stdcall CHAN_AMP_Calc(int nCount, float* pOut, float* pHigh, float* pLow,
 void __stdcall CHAN_BUYX_Calc(int nCount, float* pOut, float* pHigh, float* pLow, 
                               float* pClose, float* pVol, float* pAmount, float* pParam)
 {
-    (void)pClose; (void)pVol; (void)pAmount; (void)pParam;
+    (void)pAmount; (void)pParam;
     
     CHAN_LOG_DEBUG("CHAN_BUYX_Calc: nCount=%d", nCount);
     
@@ -608,10 +654,7 @@ void __stdcall CHAN_BUYX_Calc(int nCount, float* pOut, float* pHigh, float* pLow
     
     EnsureChanCore();
     
-    g_ChanCore->RemoveInclude(pHigh, pLow, nCount);
-    g_ChanCore->CheckFX();
-    g_ChanCore->CheckBI();
-    g_ChanCore->BuildBiSequence(nCount - 1);
+    AnalyzeWithMA(pHigh, pLow, pClose, pVol, nCount);
     
     // 输出综合买点信号
     g_ChanCore->OutputCombinedBuySignal(pOut, nCount, pLow);
@@ -621,7 +664,7 @@ void __stdcall CHAN_BUYX_Calc(int nCount, float* pOut, float* pHigh, float* pLow
 void __stdcall CHAN_SELLX_Calc(int nCount, float* pOut, float* pHigh, float* pLow, 
                                float* pClose, float* pVol, float* pAmount, float* pParam)
 {
-    (void)pClose; (void)pVol; (void)pAmount; (void)pParam;
+    (void)pAmount; (void)pParam;
     
     CHAN_LOG_DEBUG("CHAN_SELLX_Calc: nCount=%d", nCount);
     
@@ -629,10 +672,7 @@ void __stdcall CHAN_SELLX_Calc(int nCount, float* pOut, float* pHigh, float* pLo
     
     EnsureChanCore();
     
-    g_ChanCore->RemoveInclude(pHigh, pLow, nCount);
-    g_ChanCore->CheckFX();
-    g_ChanCore->CheckBI();
-    g_ChanCore->BuildBiSequence(nCount - 1);
+    AnalyzeWithMA(pHigh, pLow, pClose, pVol, nCount);
     
     // 输出综合卖点信号
     g_ChanCore->OutputCombinedSellSignal(pOut, nCount, pHigh);
@@ -646,7 +686,7 @@ void __stdcall CHAN_SELLX_Calc(int nCount, float* pOut, float* pHigh, float* pLo
 void __stdcall CHAN_ZS_Z_Calc(int nCount, float* pOut, float* pHigh, float* pLow, 
                               float* pClose, float* pVol, float* pAmount, float* pParam)
 {
-    (void)pClose; (void)pVol; (void)pAmount; (void)pParam;
+    (void)pAmount; (void)pParam;
     
     if (pOut == nullptr || nCount <= 0) return;
     
@@ -671,10 +711,7 @@ void __stdcall CHAN_PREBUY_Calc(int nCount, float* pOut, float* pHigh, float* pL
     
     EnsureChanCore();
     
-    g_ChanCore->RemoveInclude(pHigh, pLow, nCount);
-    g_ChanCore->CheckFX();
-    g_ChanCore->CheckBI();
-    g_ChanCore->BuildBiSequence(nCount - 1);
+    AnalyzeWithMA(pHigh, pLow, pClose, pVol, nCount);
     
     // 输出准买点信号
     g_ChanCore->OutputPreBuySignal(pOut, nCount, pLow);
@@ -684,16 +721,13 @@ void __stdcall CHAN_PREBUY_Calc(int nCount, float* pOut, float* pHigh, float* pL
 void __stdcall CHAN_PRESELL_Calc(int nCount, float* pOut, float* pHigh, float* pLow, 
                                  float* pClose, float* pVol, float* pAmount, float* pParam)
 {
-    (void)pClose; (void)pVol; (void)pAmount; (void)pParam;
+    (void)pAmount; (void)pParam;
     
     if (pOut == nullptr || nCount <= 0) return;
     
     EnsureChanCore();
     
-    g_ChanCore->RemoveInclude(pHigh, pLow, nCount);
-    g_ChanCore->CheckFX();
-    g_ChanCore->CheckBI();
-    g_ChanCore->BuildBiSequence(nCount - 1);
+    AnalyzeWithMA(pHigh, pLow, pClose, pVol, nCount);
     
     // 输出准卖点信号
     g_ChanCore->OutputPreSellSignal(pOut, nCount, pHigh);
@@ -703,16 +737,13 @@ void __stdcall CHAN_PRESELL_Calc(int nCount, float* pOut, float* pHigh, float* p
 void __stdcall CHAN_LIKE2B_Calc(int nCount, float* pOut, float* pHigh, float* pLow, 
                                 float* pClose, float* pVol, float* pAmount, float* pParam)
 {
-    (void)pClose; (void)pVol; (void)pAmount; (void)pParam;
+    (void)pAmount; (void)pParam;
     
     if (pOut == nullptr || nCount <= 0) return;
     
     EnsureChanCore();
     
-    g_ChanCore->RemoveInclude(pHigh, pLow, nCount);
-    g_ChanCore->CheckFX();
-    g_ChanCore->CheckBI();
-    g_ChanCore->BuildBiSequence(nCount - 1);
+    AnalyzeWithMA(pHigh, pLow, pClose, pVol, nCount);
     
     // 输出类二买信号
     g_ChanCore->OutputLikeSecondBuySignal(pOut, nCount, pLow);
@@ -722,16 +753,13 @@ void __stdcall CHAN_LIKE2B_Calc(int nCount, float* pOut, float* pHigh, float* pL
 void __stdcall CHAN_LIKE2S_Calc(int nCount, float* pOut, float* pHigh, float* pLow, 
                                 float* pClose, float* pVol, float* pAmount, float* pParam)
 {
-    (void)pClose; (void)pVol; (void)pAmount; (void)pParam;
+    (void)pAmount; (void)pParam;
     
     if (pOut == nullptr || nCount <= 0) return;
     
     EnsureChanCore();
     
-    g_ChanCore->RemoveInclude(pHigh, pLow, nCount);
-    g_ChanCore->CheckFX();
-    g_ChanCore->CheckBI();
-    g_ChanCore->BuildBiSequence(nCount - 1);
+    AnalyzeWithMA(pHigh, pLow, pClose, pVol, nCount);
     
     // 输出类二卖信号
     g_ChanCore->OutputLikeSecondSellSignal(pOut, nCount, pHigh);
