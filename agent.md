@@ -7,7 +7,7 @@
 - **项目名称**: 通达信缠论DLL插件 (chan_tdx_plugin)
 - **创建日期**: 2026-01-12
 - **最后更新**: 2026-03-17
-- **当前状态**: 🚧 开发中 - v7.5.1 匹配模型切换完成（最新匹配+BACKSET），下一步 Phase 4 回归测试发布闸门
+- **当前状态**: 🚧 开发中 - v7.5.2 自有三公式修正完成（显示口径+职责拆分+中枢边框风格统一）
 
 ---
 
@@ -889,7 +889,46 @@ PluginTCalcFuncInfo g_CalcFuncSets[] = {
 
 ## 📜 变更日志
 
-### [2026-03-08] - v7.4 Step 4.1 编译验证
+### [2026-03-17] - v7.5.2 自有三公式显示口径修正
+
+**范围:** 仅修改 `缠论完整指标.txt`、`缠论买卖点.txt`、`缠论中枢.txt`。
+`缠论主图_chan.txt` 作为借鉴/对照公式，不纳入缺陷清单，不做任何修改。
+
+**P0-1 买卖点"看起来不在端点"修复:**
+- 三个公式（完整指标、买卖点）新增 `EXACT_ENDPOINT` 开关（默认=1）
+- `EXACT_ENDPOINT=1` 时，BPOS 直接取 KXD，SPOS 直接取 KXG（严格落在端点）
+- `EXACT_ENDPOINT=0` 时，保留 KXD*0.998 / KXG*1.002 轻微偏移（不遮挡K线）
+- 删除原来无条件的 `BPOS:=IF(KXD>0, KXD*0.998, L)` 共享变量
+
+**P0-2 三个公式职责边界收敛:**
+- `缠论完整指标.txt`：一体化版（笔+中枢+买卖点），文件头明确标注互斥关系
+- `缠论买卖点.txt`：仅买卖点，文件头标注仅与纯K线或仅笔公式搭配
+- `缠论中枢.txt`：仅中枢，文件头标注不与完整指标同时使用
+- 三个文件头均加入用途、互斥关系说明
+
+**P0-3 中枢显示统一为借鉴公式风格:**
+- `缠论完整指标.txt` 和 `缠论中枢.txt` 的中枢画法从 STICKLINE 持续刷线改为：
+  - 上边界: `DRAWLINE(ZSKS, ZSZG, ZSJS, ZSZG, 0)` — LINETHICK2
+  - 下边界: `DRAWLINE(ZSKS, ZSZD, ZSJS, ZSZD, 0)` — LINETHICK2
+  - 中轴:   `DRAWLINE(ZSKS, ZZ, ZSJS, ZZ, 0)` — DOTLINE
+  - 左右竖边: 极细 `STICKLINE(ZSKS/ZSJS, ZSZG, ZSZD, 0.1, 0)` 保留
+- 上涨中枢红色，下跌中枢绿色(COLOR1D7300)，与借鉴公式一致
+
+**P1-1 BACKSET兼容写法注释:**
+- 在 BACKSET 代码段上方明确注释：
+  - BSIG/SSIG 正式落点由 DLL 决定
+  - BACKSET 仅用于兼容通达信历史显示习惯
+  - 不允许在公式层重算123买卖点逻辑
+
+**P1-2 预览能力（二期）:**
+- 暂列二期，本轮不实现
+- 等待 DLL 新增 BI_PREVIEW_DIR/PRICE、PRE_BSIG/SSIG 等接口后再改公式
+
+**版本号:** 三个文件统一标注 v7.5.2
+
+---
+
+### [2026-03-17] - v7.5.1 修正：去掉共享 BPOS/SPOS，改为按信号级别分层价格
 
 **验证结果:**
 - ✅ 32位 DLL 编译通过（cmake -G "Visual Studio 17 2022" -A Win32 + Release）
@@ -1185,5 +1224,18 @@ BOTN:=BARSLAST(BI=-1);         {距最近底端点bar数}
 TOPN:=BARSLAST(BI=1);          {距最近顶端点bar数}
 B1A:=BACKSET(BSIG=1,  BOTN+1) AND BI=-1;   {买点锁到底端点}
 S1A:=BACKSET(SSIG=-1, TOPN+1) AND BI=1;    {卖点锁到顶端点}
-DRAWTEXT(B1A, BPOS, 'B1A')    {标注在端点bar上}
+DRAWTEXT(B1A, KXD*0.998, 'B1A')    {标注在端点bar上，按信号级别分层}
 ```
+
+---
+
+### [2026-03-17] - v7.5.1 修正：去掉共享 BPOS/SPOS，改为按信号级别分层价格
+
+**问题:** 用户反馈"bar是对的，但不在转折点"。原因：所有信号共用同一个 `BPOS = IF(KXD>0, KXD*0.998, L)`，当多个信号叠于同一端点时标注重叠且价格偏移不分级。
+
+**修正:**
+- 删除 `BPOS`/`SPOS` 共享变量
+- `DRAWTEXT` 中直接写入各级别专属价格偏移：
+  - B1x: `KXD*0.998`，B2x: `KXD*0.997`，B3: `KXD*0.996`，PBx: `KXD*0.995`
+  - S1x: `KXG*1.002`，S2x: `KXG*1.003`，S3: `KXG*1.004`，PSx: `KXG*1.005`
+- 与评审报告《v7.5.1_endpoint_alignment_review_report》方案A完全对齐

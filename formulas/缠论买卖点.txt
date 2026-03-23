@@ -1,16 +1,37 @@
-{缠论买卖点 v7.5.1 - 主图叠加}
+{缠论买卖点 v7.5.2 - 主图叠加}
+{仅买卖点显示，不含笔和中枢}
 {匹配模型: 最新匹配 — DLL信号 + BACKSET回写到笔端点bar}
+{
+  用途: 仅买卖点标注，适合与纯K线或仅笔公式搭配使用。
+  互斥: 不可与「缠论完整指标.txt」同时叠加使用，
+        否则会出现重复文字、视觉错位放大。
+  说明: BSIG/SSIG 的正式落点由DLL决定(bi.end_idx)，
+        BACKSET 仅用于兼容通达信历史显示习惯，
+        不允许在公式层重算123买卖点逻辑。
+}
 
-{==== 获取买卖点数据 ====}
+{==== 函数编号说明 ====}
+{编号2:  BI   — 笔端点类型 (1=顶, -1=底, 0=非端点)}
+{编号7:  BSIG — 买点信号（DLL在笔终点bar输出）}
+{编号8:  SSIG — 卖点信号（DLL在笔终点bar输出）}
+{编号20: KXG  — 顶端点价格}
+{编号21: KXD  — 底端点价格}
+
+{==== 获取DLL数据 ====}
 BSIG:=TDXDLL1(7, H, L, C);
 SSIG:=TDXDLL1(8, H, L, C);
 BI:=TDXDLL1(2, H, L, C);
 KXG:=TDXDLL1(20, H, L, C);
 KXD:=TDXDLL1(21, H, L, C);
 
+{==== 参数开关 ====}
+{EXACT_ENDPOINT=1: 买卖点文字严格落在笔端点价格上}
+{EXACT_ENDPOINT=0: 保留轻微偏移(0.2%)，文字不遮挡K线}
+EXACT_ENDPOINT:=1;
+
 {==== 买卖点锚定位置 ====}
-BPOS:=IF(KXD>0, KXD*0.998, L);
-SPOS:=IF(KXG>0, KXG*1.002, H);
+BPOS:=IF(EXACT_ENDPOINT=1, KXD, IF(KXD>0, KXD*0.998, L));
+SPOS:=IF(EXACT_ENDPOINT=1, KXG, IF(KXG>0, KXG*1.002, H));
 
 {==== BACKSET回写到笔端点 ====}
 {距最近底端点/顶端点的bar数}
@@ -18,27 +39,27 @@ BOTN:=BARSLAST(BI=-1);
 TOPN:=BARSLAST(BI=1);
 
 {买点：从确认bar回写BOTN+1根，落点为底端点(BI=-1)}
-B1A:=BACKSET(BSIG=1,  BOTN+1) AND BI=-1;
-B1B:=BACKSET(BSIG=2,  BOTN+1) AND BI=-1;
-B2A:=BACKSET(BSIG=11, BOTN+1) AND BI=-1;
+B1A:=BACKSET(BSIG=1,   BOTN+1) AND BI=-1;
+B1B:=BACKSET(BSIG=2,   BOTN+1) AND BI=-1;
+B2A:=BACKSET(BSIG=11,  BOTN+1) AND BI=-1;
 B2B1:=BACKSET(BSIG=12, BOTN+1) AND BI=-1;
 B2B2:=BACKSET(BSIG=13, BOTN+1) AND BI=-1;
-B3:=BACKSET(BSIG=21, BOTN+1) AND BI=-1;
-PB1:=BACKSET(BSIG=31, BOTN+1) AND BI=-1;
-PB2:=BACKSET(BSIG=32, BOTN+1) AND BI=-1;
-PB3:=BACKSET(BSIG=33, BOTN+1) AND BI=-1;
+B3:=BACKSET(BSIG=21,   BOTN+1) AND BI=-1;
+PB1:=BACKSET(BSIG=31,  BOTN+1) AND BI=-1;
+PB2:=BACKSET(BSIG=32,  BOTN+1) AND BI=-1;
+PB3:=BACKSET(BSIG=33,  BOTN+1) AND BI=-1;
 
 {卖点：从确认bar回写TOPN+1根，落点为顶端点(BI=1)}
-S1A:=BACKSET(SSIG=-1,  TOPN+1) AND BI=1;
-S1B:=BACKSET(SSIG=-2,  TOPN+1) AND BI=1;
-S1C:=BACKSET(SSIG=-3,  TOPN+1) AND BI=1;
-S2A:=BACKSET(SSIG=-11, TOPN+1) AND BI=1;
+S1A:=BACKSET(SSIG=-1,   TOPN+1) AND BI=1;
+S1B:=BACKSET(SSIG=-2,   TOPN+1) AND BI=1;
+S1C:=BACKSET(SSIG=-3,   TOPN+1) AND BI=1;
+S2A:=BACKSET(SSIG=-11,  TOPN+1) AND BI=1;
 S2B1:=BACKSET(SSIG=-12, TOPN+1) AND BI=1;
 S2B2:=BACKSET(SSIG=-13, TOPN+1) AND BI=1;
-S3:=BACKSET(SSIG=-21, TOPN+1) AND BI=1;
-PS1:=BACKSET(SSIG=-31, TOPN+1) AND BI=1;
-PS2:=BACKSET(SSIG=-32, TOPN+1) AND BI=1;
-PS3:=BACKSET(SSIG=-33, TOPN+1) AND BI=1;
+S3:=BACKSET(SSIG=-21,   TOPN+1) AND BI=1;
+PS1:=BACKSET(SSIG=-31,  TOPN+1) AND BI=1;
+PS2:=BACKSET(SSIG=-32,  TOPN+1) AND BI=1;
+PS3:=BACKSET(SSIG=-33,  TOPN+1) AND BI=1;
 
 {==== 买点信号（标注在笔底端点）====}
 DRAWTEXT(B1A,  BPOS, 'B1A'),  COLORFF0000;

@@ -1,74 +1,92 @@
-{缠论完整指标 v7.5.1}
-{主图叠加指标 - 包含笔、中枢、买卖点}
+{缠论完整指标 v7.5.2}
+{一体化主图叠加指标 — 笔 + 中枢 + 买卖点}
 {匹配模型: 最新匹配 — DLL信号 + BACKSET回写到笔端点bar}
+{
+  用途: 一体化发布版，同时显示笔、中枢、买卖点。
+  互斥: 不可与「缠论买卖点.txt」「缠论中枢.txt」同时叠加使用，
+        否则会出现重复边框、重复文字、视觉错位放大。
+  参考: 缠论主图_chan.txt 为借鉴/对照公式，不属于正式发布件。
+}
 
 {==== 函数编号说明 ====}
-{编号2: BI - 笔端点类型 (1=顶, -1=底, 0=非端点)}
-{编号3: ZSZG - 中枢高点（持续输出）}
-{编号4: ZSZD - 中枢低点（持续输出）}
-{编号7: BSIG - 买点信号}
-{编号8: SSIG - 卖点信号}
-{编号20: KXG - 顶端点价格}
-{编号21: KXD - 底端点价格}
-{编号22: ZS_DIR - 中枢方向（持续输出）}
+{编号2:  BI     — 笔端点类型 (1=顶, -1=底, 0=非端点)}
+{编号3:  ZSZG   — 中枢高点（持续输出）}
+{编号4:  ZSZD   — 中枢低点（持续输出）}
+{编号7:  BSIG   — 买点信号（DLL在笔终点bar输出）}
+{编号8:  SSIG   — 卖点信号（DLL在笔终点bar输出）}
+{编号18: ZSKS   — 中枢开始标记 (1=下跌中枢开始, 2=上涨中枢开始)}
+{编号19: ZSJS   — 中枢结束标记 (1=下跌中枢结束, 2=上涨中枢结束)}
+{编号20: KXG    — 顶端点价格}
+{编号21: KXD    — 底端点价格}
+{编号22: ZS_DIR — 中枢方向（持续输出）}
 
-{==== 获取数据 ====}
+{==== 获取DLL数据 ====}
 BI:=TDXDLL1(2, H, L, C);
 KXG:=TDXDLL1(20, H, L, C);
 KXD:=TDXDLL1(21, H, L, C);
 ZSZG:=TDXDLL1(3, H, L, C);
 ZSZD:=TDXDLL1(4, H, L, C);
+ZSKS:=TDXDLL1(18, H, L, C);
+ZSJS:=TDXDLL1(19, H, L, C);
+ZS_DIR:=TDXDLL1(22, H, L, C);
 BSIG:=TDXDLL1(7, H, L, C);
 SSIG:=TDXDLL1(8, H, L, C);
+ZZ:=(ZSZG+ZSZD)/2;
+
+{==== 参数开关 ====}
+{EXACT_ENDPOINT=1: 买卖点文字严格落在笔端点价格上}
+{EXACT_ENDPOINT=0: 保留轻微偏移(0.2%)，文字不遮挡K线}
+EXACT_ENDPOINT:=1;
 
 {==== 买卖点锚定位置 ====}
-BPOS:=IF(KXD>0, KXD*0.998, L);
-SPOS:=IF(KXG>0, KXG*1.002, H);
+{BSIG/SSIG 的正式落点由DLL决定(bi.end_idx)，}
+{BACKSET 仅用于兼容通达信历史显示习惯，不在公式层重算123买卖点逻辑。}
+BPOS:=IF(EXACT_ENDPOINT=1, KXD, IF(KXD>0, KXD*0.998, L));
+SPOS:=IF(EXACT_ENDPOINT=1, KXG, IF(KXG>0, KXG*1.002, H));
 
 {==== 笔连线 ====}
 DRAWLINE(BI=1, KXG, BI=-1, KXD, 0), COLORYELLOW;
 DRAWLINE(BI=-1, KXD, BI=1, KXG, 0), COLORYELLOW;
 
-{==== 中枢区域（边框画法）====}
-在中枢内:=ZSZG>ZSZD;
-ZS_DIR:=TDXDLL1(22, H, L, C);
-ZSKS:=TDXDLL1(18, H, L, C);
-ZSJS:=TDXDLL1(19, H, L, C);
-ZZ:=(ZSZG+ZSZD)/2;
+{==== 中枢区域（借鉴公式DRAWLINE边框风格）====}
+{上沿/下沿用 DRAWLINE 从起点拉到终点，形成完整矩形边框}
+{左右竖边用极细 STICKLINE 补齐}
+{中轴用 DRAWLINE 虚线}
 
-{上涨中枢边框 — 红色}
-STICKLINE(在中枢内 AND ZS_DIR>0, ZSZG, ZSZG, 0.2, 0), COLORRED;
-STICKLINE(在中枢内 AND ZS_DIR>0, ZSZD, ZSZD, 0.2, 0), COLORRED;
-STICKLINE(ZSKS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
-STICKLINE(ZSJS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
-
-{下跌中枢边框 — 绿色}
-STICKLINE(在中枢内 AND ZS_DIR<0, ZSZG, ZSZG, 0.2, 0), COLOR1D7300;
-STICKLINE(在中枢内 AND ZS_DIR<0, ZSZD, ZSZD, 0.2, 0), COLOR1D7300;
+{--- 下跌中枢（绿色）---}
+DRAWLINE(ZSKS=1, ZSZG, ZSJS=1, ZSZG, 0), COLOR1D7300, LINETHICK2;
+DRAWLINE(ZSKS=1, ZSZD, ZSJS=1, ZSZD, 0), COLOR1D7300, LINETHICK2;
+DRAWLINE(ZSKS=1, ZZ,   ZSJS=1, ZZ,   0), COLOR1D7300, DOTLINE;
 STICKLINE(ZSKS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
 STICKLINE(ZSJS=1, ZSZG, ZSZD, 0.1, 0), COLOR1D7300;
 
-{中轴虚线}
-STICKLINE(在中枢内, ZZ, ZZ, 0.1, 0), COLOR808080;
+{--- 上涨中枢（红色）---}
+DRAWLINE(ZSKS=2, ZSZG, ZSJS=2, ZSZG, 0), COLORRED, LINETHICK2;
+DRAWLINE(ZSKS=2, ZSZD, ZSJS=2, ZSZD, 0), COLORRED, LINETHICK2;
+DRAWLINE(ZSKS=2, ZZ,   ZSJS=2, ZZ,   0), COLORRED, DOTLINE;
+STICKLINE(ZSKS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
+STICKLINE(ZSJS=2, ZSZG, ZSZD, 0.1, 0), COLORRED;
 
 {==== BACKSET回写到笔端点 ====}
+{BSIG/SSIG 由DLL在笔终点bar输出，BACKSET将其回写到笔端点bar显示}
+{此处BACKSET仅为通达信历史显示兼容，不在公式层重算买卖点逻辑}
 BOTN:=BARSLAST(BI=-1);
 TOPN:=BARSLAST(BI=1);
 
-B1A:=BACKSET(BSIG=1,  BOTN+1) AND BI=-1;
-B1B:=BACKSET(BSIG=2,  BOTN+1) AND BI=-1;
-B2A:=BACKSET(BSIG=11, BOTN+1) AND BI=-1;
+B1A:=BACKSET(BSIG=1,   BOTN+1) AND BI=-1;
+B1B:=BACKSET(BSIG=2,   BOTN+1) AND BI=-1;
+B2A:=BACKSET(BSIG=11,  BOTN+1) AND BI=-1;
 B2B1:=BACKSET(BSIG=12, BOTN+1) AND BI=-1;
 B2B2:=BACKSET(BSIG=13, BOTN+1) AND BI=-1;
-B3:=BACKSET(BSIG=21,  BOTN+1) AND BI=-1;
+B3:=BACKSET(BSIG=21,   BOTN+1) AND BI=-1;
 
-S1A:=BACKSET(SSIG=-1,  TOPN+1) AND BI=1;
-S1B:=BACKSET(SSIG=-2,  TOPN+1) AND BI=1;
-S1C:=BACKSET(SSIG=-3,  TOPN+1) AND BI=1;
-S2A:=BACKSET(SSIG=-11, TOPN+1) AND BI=1;
+S1A:=BACKSET(SSIG=-1,   TOPN+1) AND BI=1;
+S1B:=BACKSET(SSIG=-2,   TOPN+1) AND BI=1;
+S1C:=BACKSET(SSIG=-3,   TOPN+1) AND BI=1;
+S2A:=BACKSET(SSIG=-11,  TOPN+1) AND BI=1;
 S2B1:=BACKSET(SSIG=-12, TOPN+1) AND BI=1;
 S2B2:=BACKSET(SSIG=-13, TOPN+1) AND BI=1;
-S3:=BACKSET(SSIG=-21,  TOPN+1) AND BI=1;
+S3:=BACKSET(SSIG=-21,   TOPN+1) AND BI=1;
 
 {==== 买点信号（标注在笔底端点）====}
 DRAWTEXT(B1A,  BPOS, 'B1A'),  COLORFF0000;
