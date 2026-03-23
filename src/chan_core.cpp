@@ -572,6 +572,15 @@ void ChanCore::OutputBI(float* out, int count) const {
                        stroke.high : stroke.low;
         }
     }
+
+    int preview_idx = -1;
+    FractalType preview_type = FractalType::NONE;
+    float preview_price = 0.0f;
+    (void)preview_type;
+    if (GetLivePreviewEndpoint(preview_idx, preview_type, preview_price) &&
+        preview_idx >= 0 && preview_idx < count) {
+        out[preview_idx] = preview_price;
+    }
 }
 
 void ChanCore::OutputZS_H(float* out, int count) const {
@@ -611,6 +620,100 @@ int ChanCore::GetMergedIndex(int raw_index) const {
         return -1;
     }
     return m_raw_to_merged[raw_index];
+}
+
+bool ChanCore::GetLivePreviewEndpoint(int& out_idx, FractalType& out_type, float& out_price) const {
+    out_idx = -1;
+    out_type = FractalType::NONE;
+    out_price = 0.0f;
+
+    if (m_merged_klines.empty()) {
+        return false;
+    }
+
+    auto scanExtremeFrom = [&](int start_raw_idx, int start_merged_idx, FractalType preview_type,
+                               float start_price) -> bool {
+        if (start_raw_idx < 0 || start_merged_idx < 0) {
+            return false;
+        }
+
+        if (preview_type == FractalType::TOP) {
+            float best_price = start_price;
+            int best_idx = -1;
+            for (int i = start_merged_idx + 1; i < (int)m_merged_klines.size(); ++i) {
+                const KLine& k = m_merged_klines[i];
+                if (k.high > best_price ||
+                    (k.high == best_price && k.raw_high_idx > best_idx)) {
+                    best_price = k.high;
+                    best_idx = k.raw_high_idx;
+                }
+            }
+            if (best_idx > start_raw_idx && best_price > start_price) {
+                out_idx = best_idx;
+                out_type = FractalType::TOP;
+                out_price = best_price;
+                return true;
+            }
+            return false;
+        }
+
+        float best_price = start_price;
+        int best_idx = -1;
+        for (int i = start_merged_idx + 1; i < (int)m_merged_klines.size(); ++i) {
+            const KLine& k = m_merged_klines[i];
+            if (k.low < best_price ||
+                (k.low == best_price && k.raw_low_idx > best_idx)) {
+                best_price = k.low;
+                best_idx = k.raw_low_idx;
+            }
+        }
+        if (best_idx > start_raw_idx && best_price < start_price) {
+            out_idx = best_idx;
+            out_type = FractalType::BOTTOM;
+            out_price = best_price;
+            return true;
+        }
+        return false;
+    };
+
+    if (!m_strokes.empty()) {
+        const Stroke& last_stroke = m_strokes.back();
+
+        if (!last_stroke.is_confirmed) {
+            const Fractal& pivot_fx = last_stroke.end_fx;
+            if (scanExtremeFrom(pivot_fx.kline_idx,
+                                GetMergedIndex(pivot_fx.kline_idx),
+                                pivot_fx.type == FractalType::BOTTOM ? FractalType::TOP : FractalType::BOTTOM,
+                                pivot_fx.price)) {
+                return true;
+            }
+        }
+
+        for (auto it = m_strokes.rbegin(); it != m_strokes.rend(); ++it) {
+            if (!it->is_confirmed) {
+                continue;
+            }
+
+            const Fractal& end_fx = it->end_fx;
+            if (scanExtremeFrom(end_fx.kline_idx,
+                                GetMergedIndex(end_fx.kline_idx),
+                                end_fx.type == FractalType::BOTTOM ? FractalType::TOP : FractalType::BOTTOM,
+                                end_fx.price)) {
+                return true;
+            }
+            break;
+        }
+    }
+
+    if (!m_fractals.empty()) {
+        const Fractal& last_fx = m_fractals.back();
+        return scanExtremeFrom(last_fx.kline_idx,
+                               GetMergedIndex(last_fx.kline_idx),
+                               last_fx.type == FractalType::BOTTOM ? FractalType::TOP : FractalType::BOTTOM,
+                               last_fx.price);
+    }
+
+    return false;
 }
 
 // ============================================================================
@@ -1405,8 +1508,17 @@ void ChanCore::OutputBuySignal(float* out, int count, const float* lows) const {
     
     memset(out, 0, count * sizeof(float));
     
-    for (int i = 0; i < count && i < (int)m_bi_sequence.size(); ++i) {
-        float low = (lows && i < count) ? lows[i] : 0;
+    for (const auto& stroke : m_strokes) {
+        if (!stroke.is_confirmed || stroke.direction != Direction::DOWN) {
+            continue;
+        }
+
+        int i = stroke.end_idx;
+        if (i < 0 || i >= count || i >= (int)m_bi_sequence.size()) {
+            continue;
+        }
+
+        float low = (lows && i < count) ? lows[i] : stroke.low;
         
         // 优先检查一买
         FirstBuyType fb = CheckFirstBuy(i, low);
@@ -1435,8 +1547,17 @@ void ChanCore::OutputSellSignal(float* out, int count, const float* highs) const
     
     memset(out, 0, count * sizeof(float));
     
-    for (int i = 0; i < count && i < (int)m_bi_sequence.size(); ++i) {
-        float high = (highs && i < count) ? highs[i] : 0;
+    for (const auto& stroke : m_strokes) {
+        if (!stroke.is_confirmed || stroke.direction != Direction::UP) {
+            continue;
+        }
+
+        int i = stroke.end_idx;
+        if (i < 0 || i >= count || i >= (int)m_bi_sequence.size()) {
+            continue;
+        }
+
+        float high = (highs && i < count) ? highs[i] : stroke.high;
         
         // 优先检查一卖
         FirstSellType fs = CheckFirstSell(i, high);
@@ -1836,8 +1957,17 @@ void ChanCore::OutputCombinedBuySignal(float* out, int count, const float* lows)
     
     memset(out, 0, count * sizeof(float));
     
-    for (int i = 0; i < count && i < (int)m_bi_sequence.size(); ++i) {
-        float low = (lows && i < count) ? lows[i] : 0;
+    for (const auto& stroke : m_strokes) {
+        if (!stroke.is_confirmed || stroke.direction != Direction::DOWN) {
+            continue;
+        }
+
+        int i = stroke.end_idx;
+        if (i < 0 || i >= count || i >= (int)m_bi_sequence.size()) {
+            continue;
+        }
+
+        float low = (lows && i < count) ? lows[i] : stroke.low;
         
         // 优先级1：标准买点
         // 一买 -> 返回1
@@ -1898,8 +2028,17 @@ void ChanCore::OutputCombinedSellSignal(float* out, int count, const float* high
     
     memset(out, 0, count * sizeof(float));
     
-    for (int i = 0; i < count && i < (int)m_bi_sequence.size(); ++i) {
-        float high = (highs && i < count) ? highs[i] : 0;
+    for (const auto& stroke : m_strokes) {
+        if (!stroke.is_confirmed || stroke.direction != Direction::UP) {
+            continue;
+        }
+
+        int i = stroke.end_idx;
+        if (i < 0 || i >= count || i >= (int)m_bi_sequence.size()) {
+            continue;
+        }
+
+        float high = (highs && i < count) ? highs[i] : stroke.high;
         
         // 优先级1：标准卖点
         // 一卖 -> 返回-1
@@ -1991,8 +2130,17 @@ void ChanCore::OutputPreBuySignal(float* out, int count, const float* lows) cons
     }
     
     // 只输出准买点（准一买、准二买、准三买）
-    for (int i = 0; i < count && i < (int)m_bi_sequence.size(); ++i) {
-        float low = (lows && i < count) ? lows[i] : 0;
+    for (const auto& stroke : m_strokes) {
+        if (!stroke.is_confirmed || stroke.direction != Direction::DOWN) {
+            continue;
+        }
+
+        int i = stroke.end_idx;
+        if (i < 0 || i >= count || i >= (int)m_bi_sequence.size()) {
+            continue;
+        }
+
+        float low = (lows && i < count) ? lows[i] : stroke.low;
         
         // 准一买 -> 返回11
         PreFirstBuyType pfb = CheckPreFirstBuy(i, low);
@@ -2026,8 +2174,17 @@ void ChanCore::OutputPreSellSignal(float* out, int count, const float* highs) co
     }
     
     // 只输出准卖点（准一卖、准二卖、准三卖）
-    for (int i = 0; i < count && i < (int)m_bi_sequence.size(); ++i) {
-        float high = (highs && i < count) ? highs[i] : 0;
+    for (const auto& stroke : m_strokes) {
+        if (!stroke.is_confirmed || stroke.direction != Direction::UP) {
+            continue;
+        }
+
+        int i = stroke.end_idx;
+        if (i < 0 || i >= count || i >= (int)m_bi_sequence.size()) {
+            continue;
+        }
+
+        float high = (highs && i < count) ? highs[i] : stroke.high;
         
         // 准一卖 -> 返回-11
         PreFirstSellType pfs = CheckPreFirstSell(i, high);
@@ -2061,8 +2218,17 @@ void ChanCore::OutputLikeSecondBuySignal(float* out, int count, const float* low
     }
     
     // 只输出类二买信号
-    for (int i = 0; i < count && i < (int)m_bi_sequence.size(); ++i) {
-        float low = (lows && i < count) ? lows[i] : 0;
+    for (const auto& stroke : m_strokes) {
+        if (!stroke.is_confirmed || stroke.direction != Direction::DOWN) {
+            continue;
+        }
+
+        int i = stroke.end_idx;
+        if (i < 0 || i >= count || i >= (int)m_bi_sequence.size()) {
+            continue;
+        }
+
+        float low = (lows && i < count) ? lows[i] : stroke.low;
         
         LikeSecondBuyType l2b = CheckLikeSecondBuy(i, low);
         if (l2b == LikeSecondBuyType::TYPE_A) {
@@ -2082,8 +2248,17 @@ void ChanCore::OutputLikeSecondSellSignal(float* out, int count, const float* hi
     }
     
     // 只输出类二卖信号
-    for (int i = 0; i < count && i < (int)m_bi_sequence.size(); ++i) {
-        float high = (highs && i < count) ? highs[i] : 0;
+    for (const auto& stroke : m_strokes) {
+        if (!stroke.is_confirmed || stroke.direction != Direction::UP) {
+            continue;
+        }
+
+        int i = stroke.end_idx;
+        if (i < 0 || i >= count || i >= (int)m_bi_sequence.size()) {
+            continue;
+        }
+
+        float high = (highs && i < count) ? highs[i] : stroke.high;
         
         LikeSecondSellType l2s = CheckLikeSecondSell(i, high);
         if (l2s == LikeSecondSellType::TYPE_A) {

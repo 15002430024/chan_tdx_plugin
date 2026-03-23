@@ -360,7 +360,14 @@ public:
     
     /// @brief 获取原始K线索引对应的合并K线索引
     int GetMergedIndex(int raw_index) const;
-    
+
+    /// @brief 获取实时预览端点（用于尾笔贪婪显示）
+    /// @param out_idx 端点所在原始K线索引
+    /// @param out_type 端点类型（TOP/BOTTOM）
+    /// @param out_price 端点价格
+    /// @return true=存在预览端点，false=不存在
+    bool GetLivePreviewEndpoint(int& out_idx, FractalType& out_type, float& out_price) const;
+
 private:
     // 配置
     ChanConfig m_config;

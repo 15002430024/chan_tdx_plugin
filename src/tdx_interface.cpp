@@ -319,11 +319,9 @@ void __stdcall CHAN_BI_Calc(int nCount, float* pOut, float* pHigh, float* pLow,
     config.min_bi_len = minBiLen;
     g_ChanCore->SetConfig(config);
     
-    // 如果K线数量变化，重新计算
-    if (nCount != g_LastCount) {
-        g_ChanCore->Analyze(pHigh, pLow, pClose, pVol, nCount);
-        g_LastCount = nCount;
-    }
+    // 尾bar会实时跳动，不能只按K线数量缓存
+    g_ChanCore->Analyze(pHigh, pLow, pClose, pVol, nCount);
+    g_LastCount = nCount;
     
     // 输出笔端点
     g_ChanCore->OutputBI(pOut, nCount);
@@ -353,18 +351,15 @@ void __stdcall CHAN_ZS_H_Calc(int nCount, float* pOut, float* pHigh, float* pLow
     
     EnsureChanCore();
     
-    // 如果K线数量变化，重新计算
-    if (nCount != g_LastCount) {
-        int minBiLen = 5;
-        if (pParam && pParam[0] >= 1 && pParam[0] <= 10) {
-            minBiLen = static_cast<int>(pParam[0]);
-        }
-        chan::ChanConfig config = g_ChanCore->GetConfig();
-        config.min_bi_len = minBiLen;
-        g_ChanCore->SetConfig(config);
-        g_ChanCore->Analyze(pHigh, pLow, pClose, pVol, nCount);
-        g_LastCount = nCount;
+    int minBiLen = 5;
+    if (pParam && pParam[0] >= 1 && pParam[0] <= 10) {
+        minBiLen = static_cast<int>(pParam[0]);
     }
+    chan::ChanConfig config = g_ChanCore->GetConfig();
+    config.min_bi_len = minBiLen;
+    g_ChanCore->SetConfig(config);
+    g_ChanCore->Analyze(pHigh, pLow, pClose, pVol, nCount);
+    g_LastCount = nCount;
     
     // 输出中枢高点
     g_ChanCore->OutputZS_H(pOut, nCount);
@@ -380,18 +375,15 @@ void __stdcall CHAN_ZS_L_Calc(int nCount, float* pOut, float* pHigh, float* pLow
     
     EnsureChanCore();
     
-    // 如果K线数量变化，重新计算
-    if (nCount != g_LastCount) {
-        int minBiLen = 5;
-        if (pParam && pParam[0] >= 1 && pParam[0] <= 10) {
-            minBiLen = static_cast<int>(pParam[0]);
-        }
-        chan::ChanConfig config = g_ChanCore->GetConfig();
-        config.min_bi_len = minBiLen;
-        g_ChanCore->SetConfig(config);
-        g_ChanCore->Analyze(pHigh, pLow, pClose, pVol, nCount);
-        g_LastCount = nCount;
+    int minBiLen = 5;
+    if (pParam && pParam[0] >= 1 && pParam[0] <= 10) {
+        minBiLen = static_cast<int>(pParam[0]);
     }
+    chan::ChanConfig config = g_ChanCore->GetConfig();
+    config.min_bi_len = minBiLen;
+    g_ChanCore->SetConfig(config);
+    g_ChanCore->Analyze(pHigh, pLow, pClose, pVol, nCount);
+    g_LastCount = nCount;
     
     // 输出中枢低点
     g_ChanCore->OutputZS_L(pOut, nCount);

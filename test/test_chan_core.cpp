@@ -1736,7 +1736,133 @@ TEST_CASE(CheckBI_UnconfirmedStroke) {
 }
 
 // ----------------------------------------------------------------------------
-// 测试39: CheckZS - ZG/ZD 不因延伸缩小
+// 测试39: CheckBI - 实时预览端点应随最新极值贪婪更新
+// ----------------------------------------------------------------------------
+TEST_CASE(CheckBI_LivePreviewEndpoint) {
+    chan::ChanCore core_short;
+    chan::ChanCore core_long;
+
+    chan::ChanConfig config;
+    config.min_bi_len = 5;
+    core_short.SetConfig(config);
+    core_long.SetConfig(config);
+
+    const int SIZE_SHORT = 23;
+    const int SIZE_LONG = 25;
+    float highs[SIZE_LONG], lows[SIZE_LONG];
+
+    highs[0] = 12.0f; lows[0] = 11.0f;
+    highs[1] = 13.0f; lows[1] = 12.0f;
+    highs[2] = 15.0f; lows[2] = 14.0f;
+    highs[3] = 13.0f; lows[3] = 12.0f;
+    highs[4] = 12.0f; lows[4] = 11.0f;
+
+    highs[5] = 11.0f; lows[5] = 10.0f;
+    highs[6] = 10.0f; lows[6] = 9.0f;
+    highs[7] = 9.0f;  lows[7] = 7.0f;
+    highs[8] = 10.0f; lows[8] = 9.0f;
+    highs[9] = 11.0f; lows[9] = 10.0f;
+
+    highs[10] = 12.0f; lows[10] = 11.0f;
+    highs[11] = 13.0f; lows[11] = 12.0f;
+    highs[12] = 14.0f; lows[12] = 13.0f;
+    highs[13] = 13.0f; lows[13] = 12.0f;
+    highs[14] = 12.0f; lows[14] = 11.0f;
+
+    highs[15] = 11.0f; lows[15] = 10.0f;
+    highs[16] = 10.0f; lows[16] = 9.0f;
+    highs[17] = 9.0f;  lows[17] = 8.0f;
+    highs[18] = 10.0f; lows[18] = 9.0f;
+    highs[19] = 11.0f; lows[19] = 10.0f;
+
+    highs[20] = 12.0f; lows[20] = 11.0f;
+    highs[21] = 13.0f; lows[21] = 12.0f;
+    highs[22] = 14.0f; lows[22] = 13.0f;
+    highs[23] = 15.0f; lows[23] = 14.0f;
+    highs[24] = 16.0f; lows[24] = 15.0f;
+
+    core_short.Analyze(highs, lows, nullptr, nullptr, SIZE_SHORT);
+    core_long.Analyze(highs, lows, nullptr, nullptr, SIZE_LONG);
+
+    int short_idx = -1;
+    int long_idx = -1;
+    chan::FractalType short_type = chan::FractalType::NONE;
+    chan::FractalType long_type = chan::FractalType::NONE;
+    float short_price = 0.0f;
+    float long_price = 0.0f;
+
+    ASSERT_TRUE(core_short.GetLivePreviewEndpoint(short_idx, short_type, short_price));
+    ASSERT_TRUE(core_long.GetLivePreviewEndpoint(long_idx, long_type, long_price));
+
+    std::cout << "\n  preview short idx=" << short_idx << " price=" << short_price;
+    std::cout << ", long idx=" << long_idx << " price=" << long_price;
+
+    ASSERT_TRUE(short_type == chan::FractalType::TOP);
+    ASSERT_TRUE(long_type == chan::FractalType::TOP);
+    ASSERT_EQ(short_idx, 22);
+    ASSERT_EQ(long_idx, 24);
+    ASSERT_FLOAT_EQ(short_price, 14.0f);
+    ASSERT_FLOAT_EQ(long_price, 16.0f);
+
+    float bi_out[SIZE_LONG] = {0};
+    core_long.OutputBI(bi_out, SIZE_LONG);
+    ASSERT_FLOAT_EQ(bi_out[24], 16.0f);
+}
+
+// ----------------------------------------------------------------------------
+// 测试40: 旧接口信号输出 - 只能落在已确认笔端点
+// ----------------------------------------------------------------------------
+TEST_CASE(SignalOutput_ConfirmedEndpointsOnly) {
+    chan::ChanCore core;
+
+    float highs[] = {
+        30.0f, 31.0f, 32.0f, 31.0f, 30.0f,
+        29.0f, 28.0f, 25.0f, 26.0f, 27.0f,
+        28.0f, 29.0f, 30.0f, 29.0f, 28.0f,
+        27.0f, 26.0f, 23.0f, 24.0f, 25.0f
+    };
+    float lows[] = {
+        29.0f, 30.0f, 31.0f, 30.0f, 29.0f,
+        28.0f, 27.0f, 24.0f, 25.0f, 26.0f,
+        27.0f, 28.0f, 29.0f, 28.0f, 27.0f,
+        26.0f, 25.0f, 22.0f, 23.0f, 24.0f
+    };
+
+    const int count = 20;
+    core.RemoveInclude(highs, lows, count);
+    core.CheckFX();
+    core.CheckBI();
+    core.BuildBiSequence(count - 1);
+
+    float pre_buy[20] = {0};
+    float combined_buy[20] = {0};
+    core.OutputPreBuySignal(pre_buy, count, lows);
+    core.OutputCombinedBuySignal(combined_buy, count, lows);
+
+    int pre_count = 0;
+    int combined_count = 0;
+    for (int i = 0; i < count; ++i) {
+        if (pre_buy[i] != 0.0f || combined_buy[i] != 0.0f) {
+            bool is_confirmed_bottom = false;
+            for (const auto& stroke : core.GetStrokes()) {
+                if (stroke.is_confirmed &&
+                    stroke.direction == chan::Direction::DOWN &&
+                    stroke.end_idx == i) {
+                    is_confirmed_bottom = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(is_confirmed_bottom);
+        }
+        if (pre_buy[i] != 0.0f) pre_count++;
+        if (combined_buy[i] != 0.0f) combined_count++;
+    }
+
+    std::cout << "\n  pre_buy_count=" << pre_count << ", combined_buy_count=" << combined_count;
+}
+
+// ----------------------------------------------------------------------------
+// 测试41: CheckZS - ZG/ZD 不因延伸缩小
 // ----------------------------------------------------------------------------
 TEST_CASE(CheckZS_NoShrink) {
     chan::ChanCore core;

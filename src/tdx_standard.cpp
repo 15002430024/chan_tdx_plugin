@@ -207,6 +207,14 @@ void BiDuanDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pf
                 pfOUT[bi.end_idx] = -1.0f;
         }
     }
+
+    int preview_idx = -1;
+    chan::FractalType preview_type = chan::FractalType::NONE;
+    float preview_price = 0.0f;
+    if (g_Core.GetLivePreviewEndpoint(preview_idx, preview_type, preview_price) &&
+        preview_idx >= 0 && preview_idx < DataLen) {
+        pfOUT[preview_idx] = (preview_type == chan::FractalType::TOP) ? 1.0f : -1.0f;
+    }
 }
 
 // 函数3：中枢高点
@@ -633,6 +641,15 @@ void BiGaoDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfI
             }
         }
     }
+
+    int preview_idx = -1;
+    chan::FractalType preview_type = chan::FractalType::NONE;
+    float preview_price = 0.0f;
+    if (g_Core.GetLivePreviewEndpoint(preview_idx, preview_type, preview_price) &&
+        preview_type == chan::FractalType::TOP &&
+        preview_idx >= 0 && preview_idx < DataLen) {
+        pfOUT[preview_idx] = preview_price;
+    }
 }
 
 // 函数21：笔端点低点价格（只在底点输出）
@@ -667,6 +684,15 @@ void BiDiDian(int DataLen, float* pfOUT, float* pfINa, float* pfINb, float* pfIN
                 }
             }
         }
+    }
+
+    int preview_idx = -1;
+    chan::FractalType preview_type = chan::FractalType::NONE;
+    float preview_price = 0.0f;
+    if (g_Core.GetLivePreviewEndpoint(preview_idx, preview_type, preview_price) &&
+        preview_type == chan::FractalType::BOTTOM &&
+        preview_idx >= 0 && preview_idx < DataLen) {
+        pfOUT[preview_idx] = preview_price;
     }
 }
 
